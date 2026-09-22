@@ -1,0 +1,897 @@
+{
+  "Application": {
+    "Screens": [
+      {
+        "Name": "start_screen",
+        "Components": [
+          {
+            "Type": "Box",
+            "Name": "box1",
+            "Width": 800,
+            "Height": 480,
+            "Color": {
+              "Red": 64,
+              "Green": 178,
+              "Blue": 156
+            }
+          },
+          {
+            "Type": "Button",
+            "Name": "button1",
+            "X": 280,
+            "Y": 215,
+            "Width": 240,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_round_inactive.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_round_normal.png"
+          },
+          {
+            "Type": "Button",
+            "Name": "button2",
+            "X": 280,
+            "Y": 304,
+            "Width": 240,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_round_inactive.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_round_normal.png"
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea1",
+            "X": 340,
+            "Y": 228,
+            "Width": 121,
+            "Height": 24,
+            "TextId": "__SingleUse_ETXX",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 247,
+              "Green": 245,
+              "Blue": 245
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea2",
+            "X": 378,
+            "Y": 317,
+            "Width": 44,
+            "Height": 24,
+            "TextId": "__SingleUse_JCR8",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 252,
+              "Green": 247,
+              "Blue": 247
+            },
+            "AutoSize": true
+          }
+        ],
+        "Interactions": [
+          {
+            "InteractionName": "Interaction1",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "button1"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionSlide",
+              "ScreenTransitionDirection": "East",
+              "ActionComponent": "Oscillograph"
+            }
+          },
+          {
+            "InteractionName": "Interaction2",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "button2"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionSlide",
+              "ScreenTransitionDirection": "East",
+              "ActionComponent": "Logic"
+            }
+          }
+        ]
+      },
+      {
+        "Name": "Oscillograph",
+        "CanvasBufferSize": 12000,
+        "Components": [
+          {
+            "Type": "Box",
+            "Name": "box1",
+            "Width": 800,
+            "Height": 480,
+            "Color": {
+              "Red": 18,
+              "Green": 4,
+              "Blue": 4
+            }
+          },
+          {
+            "Type": "Button",
+            "Name": "button1",
+            "Width": 240,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_normal.png",
+            "Preset": "alternate_theme\\presets\\button\\regular\\height_50\\medium_rounded_normal.json"
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea1",
+            "X": 96,
+            "Y": 13,
+            "Width": 48,
+            "Height": 24,
+            "TextId": "__SingleUse_O369",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 250,
+              "Green": 247,
+              "Blue": 247
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "BoxWithBorder",
+            "Name": "boxWithBorder1",
+            "Y": 69,
+            "Width": 674,
+            "Height": 361,
+            "Color": {
+              "Red": 13,
+              "Green": 12,
+              "Blue": 12
+            },
+            "BorderColor": {
+              "Red": 166,
+              "Green": 166,
+              "Blue": 166
+            },
+            "BorderSize": 3
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph1",
+            "Y": 69,
+            "Width": 674,
+            "Height": 361,
+            "DataSeed": 1522535568,
+            "NumberOfValues": 512,
+            "MaxY": 4096.0,
+            "Precision": "1",
+            "LastIndex": 511,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 20,
+                  "Green": 151,
+                  "Blue": 197
+                }
+              }
+            ]
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph2",
+            "Y": 69,
+            "Width": 674,
+            "Height": 361,
+            "DataSeed": -1166268873,
+            "NumberOfValues": 512,
+            "MaxY": 4096.0,
+            "Precision": "1",
+            "LastIndex": 511,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 214,
+                  "Green": 208,
+                  "Blue": 30
+                }
+              }
+            ],
+            "XAxisGrid": {
+              "Type": "GraphGrid",
+              "Color": {
+                "Red": 166,
+                "Green": 166,
+                "Blue": 166
+              },
+              "Interval": 85.0,
+              "LineWidth": 1
+            },
+            "YAxisGrid": {
+              "Type": "GraphGrid",
+              "Color": {
+                "Red": 166,
+                "Green": 166,
+                "Blue": 166
+              },
+              "Interval": 453.0,
+              "LineWidth": 1
+            }
+          },
+          {
+            "Type": "Box",
+            "Name": "box2",
+            "X": 684,
+            "Y": 69,
+            "Width": 108,
+            "Height": 361,
+            "Color": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            }
+          },
+          {
+            "Type": "Box",
+            "Name": "box3",
+            "Y": 437,
+            "Width": 792,
+            "Height": 43,
+            "Color": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            }
+          },
+          {
+            "Type": "Button",
+            "Name": "button2",
+            "X": 560,
+            "Width": 240,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_normal.png",
+            "Preset": "alternate_theme\\presets\\button\\regular\\height_50\\medium_rounded_normal.json"
+          }
+        ],
+        "Interactions": [
+          {
+            "InteractionName": "Interaction1",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "button1"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionNone",
+              "ActionComponent": "start_screen"
+            }
+          }
+        ]
+      },
+      {
+        "Name": "Logic",
+        "CanvasBufferSize": 12000,
+        "Components": [
+          {
+            "Type": "Box",
+            "Name": "box1",
+            "Width": 800,
+            "Height": 480,
+            "Color": {
+              "Red": 5,
+              "Green": 5,
+              "Blue": 5
+            }
+          },
+          {
+            "Type": "Line",
+            "Name": "line2_1",
+            "X": 96,
+            "Y": 62,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Red": 35,
+              "Green": 204,
+              "Blue": 22
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "Button",
+            "Name": "button1",
+            "X": 623,
+            "Width": 175,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_normal.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_normal.png"
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea1",
+            "X": 686,
+            "Y": 13,
+            "Width": 48,
+            "Height": 24,
+            "TextId": "__SingleUse_0ZQO",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 247,
+              "Green": 240,
+              "Blue": 240
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph1",
+            "X": 96,
+            "Y": 6,
+            "Width": 520,
+            "Height": 50,
+            "DataSeed": -398524644,
+            "NumberOfValues": 128,
+            "MaxY": 1.0,
+            "Precision": "1",
+            "LastIndex": 127,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 20,
+                  "Green": 151,
+                  "Blue": 197
+                }
+              }
+            ]
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph2",
+            "X": 96,
+            "Y": 62,
+            "Width": 520,
+            "Height": 50,
+            "DataSeed": -1735953241,
+            "NumberOfValues": 128,
+            "MaxY": 1.0,
+            "Precision": "1",
+            "LastIndex": 127,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 35,
+                  "Green": 204,
+                  "Blue": 22
+                }
+              }
+            ]
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph3",
+            "X": 96,
+            "Y": 119,
+            "Width": 520,
+            "Height": 50,
+            "DataSeed": 5758044,
+            "NumberOfValues": 128,
+            "MaxY": 1.0,
+            "Precision": "1",
+            "LastIndex": 127,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 196,
+                  "Green": 22,
+                  "Blue": 22
+                }
+              }
+            ]
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph4",
+            "X": 96,
+            "Y": 176,
+            "Width": 520,
+            "Height": 50,
+            "DataSeed": -1884062577,
+            "NumberOfValues": 128,
+            "MaxY": 1.0,
+            "Precision": "1",
+            "LastIndex": 127,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 118,
+                  "Green": 22,
+                  "Blue": 196
+                }
+              }
+            ]
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph5",
+            "X": 96,
+            "Y": 238,
+            "Width": 520,
+            "Height": 50,
+            "DataSeed": 116890188,
+            "NumberOfValues": 128,
+            "MaxY": 1.0,
+            "Precision": "1",
+            "LastIndex": 127,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 196,
+                  "Green": 170,
+                  "Blue": 22
+                }
+              }
+            ]
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph6",
+            "X": 96,
+            "Y": 295,
+            "Width": 520,
+            "Height": 50,
+            "DataSeed": 211960612,
+            "NumberOfValues": 128,
+            "MaxY": 1.0,
+            "Precision": "1",
+            "LastIndex": 127,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Green": 158,
+                  "Blue": 126
+                }
+              }
+            ]
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph7",
+            "X": 96,
+            "Y": 354,
+            "Width": 520,
+            "Height": 50,
+            "DataSeed": -938417141,
+            "NumberOfValues": 128,
+            "MaxY": 1.0,
+            "Precision": "1",
+            "LastIndex": 127,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 196,
+                  "Green": 109,
+                  "Blue": 22
+                }
+              }
+            ]
+          },
+          {
+            "Type": "DynamicGraph",
+            "Name": "dynamicGraph8",
+            "X": 96,
+            "Y": 412,
+            "Width": 520,
+            "Height": 50,
+            "DataSeed": 975313358,
+            "NumberOfValues": 128,
+            "MaxY": 1.0,
+            "Precision": "1",
+            "LastIndex": 127,
+            "XAxisScale": 1.0,
+            "GraphType": "GraphWrapOverwrite",
+            "GraphDrawers": [
+              {
+                "Type": "LineDrawer",
+                "LineWidth": 2,
+                "FileNameImage": "",
+                "Color": {
+                  "Red": 196,
+                  "Green": 14,
+                  "Blue": 181
+                }
+              }
+            ]
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea2",
+            "X": 29,
+            "Y": 19,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_CH2G",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 250,
+              "Green": 245,
+              "Blue": 245
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea3",
+            "X": 29,
+            "Y": 75,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_GI2V",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 250,
+              "Green": 247,
+              "Blue": 247
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea4",
+            "X": 29,
+            "Y": 132,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_H223",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 250,
+              "Green": 245,
+              "Blue": 245
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea5",
+            "X": 29,
+            "Y": 189,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_TO3V",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 250,
+              "Green": 247,
+              "Blue": 247
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea6",
+            "X": 29,
+            "Y": 251,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_1E1M",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 250,
+              "Green": 245,
+              "Blue": 245
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea7",
+            "X": 29,
+            "Y": 308,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_NTY8",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 252,
+              "Green": 250,
+              "Blue": 250
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea8",
+            "X": 29,
+            "Y": 367,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_QMNW",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 250,
+              "Green": 245,
+              "Blue": 245
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea9",
+            "X": 29,
+            "Y": 425,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_YLLS",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 250,
+              "Green": 245,
+              "Blue": 245
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "Line",
+            "Name": "line1",
+            "X": 96,
+            "Y": 6,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Red": 20,
+              "Green": 151,
+              "Blue": 197
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "Line",
+            "Name": "line2",
+            "X": 96,
+            "Y": 62,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Red": 35,
+              "Green": 204,
+              "Blue": 22
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "Line",
+            "Name": "line3",
+            "X": 96,
+            "Y": 119,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Red": 196,
+              "Green": 22,
+              "Blue": 22
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "Line",
+            "Name": "line4",
+            "X": 96,
+            "Y": 176,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Red": 118,
+              "Green": 22,
+              "Blue": 196
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "Line",
+            "Name": "line5",
+            "X": 96,
+            "Y": 240,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Red": 196,
+              "Green": 170,
+              "Blue": 22
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "Line",
+            "Name": "line6",
+            "X": 96,
+            "Y": 295,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Green": 158,
+              "Blue": 126
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "Line",
+            "Name": "line7",
+            "X": 96,
+            "Y": 354,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Red": 196,
+              "Green": 109,
+              "Blue": 22
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "Line",
+            "Name": "line8",
+            "X": 96,
+            "Y": 412,
+            "Width": 520,
+            "Height": 50,
+            "Color": {
+              "Red": 196,
+              "Green": 14,
+              "Blue": 181
+            },
+            "StartY": 50.0,
+            "EndX": 520.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Square"
+          }
+        ],
+        "Interactions": [
+          {
+            "InteractionName": "Interaction1",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "button1"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionSlide",
+              "ScreenTransitionDirection": "East",
+              "ActionComponent": "start_screen"
+            }
+          }
+        ]
+      }
+    ],
+    "CustomContainerDefinitions": [],
+    "Name": "Oscillograph_H7",
+    "Resolution": {
+      "Width": 800,
+      "Height": 480
+    },
+    "SelectedColorDepth": 16,
+    "StartupScreenName": "start_screen",
+    "SelectedStartupLanguage": "GB",
+    "TouchGfxPath": "../Middlewares/ST/touchgfx",
+    "UIPath": ".",
+    "AvailableColorDepths": [
+      16
+    ],
+    "AvailableLCDs": {
+      "16": "LCD16bpp"
+    },
+    "AvailableSections": [
+      "ExtFlashSection",
+      "IntFlashSection"
+    ],
+    "AvailableResolutions": [
+      {
+        "Width": 800,
+        "Height": 480
+      }
+    ],
+    "PhysicalButtons": [],
+    "FrameworkFeatures": {
+      "LCD16bpp": {
+        "Id": "LCD16bpp",
+        "IsEnabled": false
+      }
+    },
+    "GenerateAssetsCommand": "make -f simulator/gcc/Makefile assets -j8",
+    "PostGenerateCommand": "touchgfx update_project --project-file=simulator/msvs/Application.vcxproj",
+    "PostGenerateTargetCommand": "touchgfx update_project",
+    "CompileSimulatorCommand": "make -f simulator/gcc/Makefile -j8",
+    "RunSimulatorCommand": "build\\bin\\simulator.exe",
+    "LandscapeSkinX": 0,
+    "LandscapeSkinY": 0,
+    "PortraitSkinX": 0,
+    "PortraitSkinY": 0,
+    "DisplayOrientation": "Landscape",
+    "Family": "STM32H7",
+    "SubFamily": "STM32H747/757",
+    "Toolchain": "CMake",
+    "Platform": "m7",
+    "ProjectFile": "../../Oscillograph_H7.ioc",
+    "OptionalComponentsRoot": "../Middlewares/ST/touchgfx_components",
+    "OptionalComponents": [],
+    "AdditionalFeatures": []
+  },
+  "Version": "4.26.1"
+}

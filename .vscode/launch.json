@@ -1,0 +1,54 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "CM7_Debug",
+            "type": "stlinkgdbtarget",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "preBuild": "${command:st-stm32-ide-debug-launch.build}",
+            "preLaunchTask": "CubeProgrammer: Flash",
+            "runEntry": "main",
+            "deviceName": "STM32H747XI",
+            "deviceCore": "Cortex-M7",
+            //"serverCubeProgPath": "C:\\Users\\chair\\AppData\\Local\\stm32cube\\bundles\\programmer\\2.22.0+st.1\\bin",
+            "serverReset": "在复位下连接",
+            "serverShared": true,
+            "serverErase": "按扇区擦除",
+            "serverHaltAllCores": true,
+            "imagesAndSymbols": [
+                {
+                    "symbolFileName": "${workspaceFolder}/CM7/build/Oscillograph_H7_CM7.elf"
+                },
+                {
+                    "symbolFileName": "${workspaceFolder}/CM4/build/Oscillograph_H7_CM4.elf"
+                }
+            ]
+        },
+        {
+            "name": "CM4_Debug",
+            "type": "stlinkgdbtarget",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "runEntry": "main",
+            "deviceName": "STM32H747XI",
+            "deviceCore": "Cortex-M4",
+            //"serverCubeProgPath": "C:\\Users\\chair\\AppData\\Local\\stm32cube\\bundles\\programmer\\2.22.0+st.1\\bin",
+            "serverShared": true,
+            "serverApID": "3",
+            "serverPort": "61239",
+            "serverReset": "无",
+            "imagesAndSymbols": [
+                {
+                    "symbolFileName": "${workspaceFolder}/CM4/build/Oscillograph_H7_CM4.elf"
+                }
+            ]
+        }
+    ],
+    "compounds": [
+        {
+            "name": "DualCore_Debug",
+            "configurations": ["CM7_Debug", "CM4_Debug"]
+        }
+    ]
+}

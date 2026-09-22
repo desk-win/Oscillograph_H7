@@ -1,0 +1,11 @@
+CompileFlags:
+  CompilationDatabase: CM4/build/Debug
+If:
+  PathMatch: CM4/.*
+
+---
+
+CompileFlags:
+  CompilationDatabase: CM7/build
+If:
+  PathMatch: CM7/.*

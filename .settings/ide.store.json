@@ -1,0 +1,7 @@
+{
+  "source": {
+    "sourceType": "STM32CubeMX"
+  },
+  "device": "STM32H747XIH6",
+  "toolchain": "GCC"
+}
