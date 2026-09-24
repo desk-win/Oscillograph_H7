@@ -29,6 +29,7 @@
 #include "app_touchgfx.h"
 #include <sys/_types.h>
 #include "uart_printf.h"
+#include "osc_probe.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -145,10 +146,28 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
-  /* Infinite loop */
+  /* 调优探针: 每秒往 USART1 打一行耗时统计。
+   *
+   * 故意放在这个任务里而不是 TouchGFX 任务里 —— HAL_UART_Transmit 是阻塞的,
+   * 一行一百多个字符在 115200 下要 10 ms 上下, 打进 TouchGFX 任务就把要量的
+   * 东西本身弄脏了 (而且这个任务优先级比 TouchGFX 低, 它跑的时候 TouchGFX
+   * 随时能抢回去)。
+   *
+   * 判读方法看 osc_probe.h。调完连这份一起删掉。 */
+  uint32_t lastPrint = 0;
+  uint8_t  firstPrint = 1;
+
   for(;;)
   {
-    osDelay(500);
+    osDelay(200);
+
+    const uint32_t now = OSC_PROBE_CYC;
+    if (firstPrint || ((uint32_t)(now - lastPrint) >= SystemCoreClock))
+    {
+      firstPrint = 0;
+      lastPrint  = now;
+      OSC_Probe_Report();
+    }
   }
   /* USER CODE END StartDefaultTask */
 }

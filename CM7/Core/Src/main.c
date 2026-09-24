@@ -177,6 +177,10 @@ Error_Handler();
   MX_TouchGFX_PreOSInit();
   /* USER CODE BEGIN 2 */
   LCD_BackLight(1);
+
+  /* 注册 MDMA 回调 + 打开 CM4 发布事件的中断入口 —— 必须在 MX_MDMA_Init()
+   * 之后、而且要在 osKernelStart() 之前, 不然第一发搬运可能赶在回调注册前面。 */
+  M7_OSC_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */

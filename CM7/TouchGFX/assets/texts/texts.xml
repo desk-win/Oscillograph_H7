@@ -6,6 +6,30 @@
   <Texts>
     <TextGroup Id="Group1" />
     <TextGroup Id="Unsorted">
+      <Text Id="__SingleUse_I0V3" Alignment="Center" TypographyId="Default">
+        <Translation Language="GB">Setting</Translation>
+      </Text>
+      <Text Id="__SingleUse_8GCD" Alignment="Center" TypographyId="Default">
+        <Translation Language="GB">Save</Translation>
+      </Text>
+      <Text Id="__SingleUse_TTPT" Alignment="Center" TypographyId="Default">
+        <Translation Language="GB">Cancel</Translation>
+      </Text>
+      <Text Id="__SingleUse_R7ZP" Alignment="Center" TypographyId="Default">
+        <Translation Language="GB">Setting</Translation>
+      </Text>
+      <Text Id="__SingleUse_TKBN" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH2</Translation>
+      </Text>
+      <Text Id="__SingleUse_MEB3" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH1</Translation>
+      </Text>
+      <Text Id="__SingleUse_LW6O" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH2</Translation>
+      </Text>
+      <Text Id="__SingleUse_TDG0" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH1</Translation>
+      </Text>
       <Text Id="__SingleUse_YLLS" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">CH8</Translation>
       </Text>

@@ -115,16 +115,15 @@
           {
             "Type": "Button",
             "Name": "button1",
-            "Width": 240,
+            "Width": 175,
             "Height": 50,
-            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_pressed.png",
-            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_normal.png",
-            "Preset": "alternate_theme\\presets\\button\\regular\\height_50\\medium_rounded_normal.json"
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_normal.png"
           },
           {
             "Type": "TextArea",
             "Name": "textArea1",
-            "X": 96,
+            "X": 63,
             "Y": 13,
             "Width": 48,
             "Height": 24,
@@ -138,107 +137,86 @@
             "AutoSize": true
           },
           {
-            "Type": "BoxWithBorder",
-            "Name": "boxWithBorder1",
-            "Y": 69,
+            "Type": "Line",
+            "Name": "line1",
+            "Y": 249,
             "Width": 674,
-            "Height": 361,
+            "Height": 55,
             "Color": {
-              "Red": 13,
-              "Green": 12,
-              "Blue": 12
-            },
-            "BorderColor": {
               "Red": 166,
               "Green": 166,
               "Blue": 166
             },
-            "BorderSize": 3
+            "EndX": 674.0,
+            "LineWidth": 2.0,
+            "LineEndingStyle": "Round"
           },
           {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph1",
+            "Type": "Line",
+            "Name": "line2",
             "Y": 69,
             "Width": 674,
-            "Height": 361,
-            "DataSeed": 1522535568,
-            "NumberOfValues": 512,
-            "MaxY": 4096.0,
-            "Precision": "1",
-            "LastIndex": 511,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 20,
-                  "Green": 151,
-                  "Blue": 197
-                }
-              }
-            ]
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph2",
-            "Y": 69,
-            "Width": 674,
-            "Height": 361,
-            "DataSeed": -1166268873,
-            "NumberOfValues": 512,
-            "MaxY": 4096.0,
-            "Precision": "1",
-            "LastIndex": 511,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 214,
-                  "Green": 208,
-                  "Blue": 30
-                }
-              }
-            ],
-            "XAxisGrid": {
-              "Type": "GraphGrid",
-              "Color": {
-                "Red": 166,
-                "Green": 166,
-                "Blue": 166
-              },
-              "Interval": 85.0,
-              "LineWidth": 1
+            "Height": 50,
+            "Color": {
+              "Red": 166,
+              "Green": 166,
+              "Blue": 166
             },
-            "YAxisGrid": {
-              "Type": "GraphGrid",
-              "Color": {
-                "Red": 166,
-                "Green": 166,
-                "Blue": 166
-              },
-              "Interval": 453.0,
-              "LineWidth": 1
-            }
+            "EndX": 674.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Round"
           },
           {
-            "Type": "Box",
-            "Name": "box2",
-            "X": 684,
+            "Type": "Line",
+            "Name": "line3",
             "Y": 69,
-            "Width": 108,
+            "Width": 96,
             "Height": 361,
             "Color": {
-              "Red": 255,
-              "Green": 255,
-              "Blue": 255
-            }
+              "Red": 166,
+              "Green": 166,
+              "Blue": 166
+            },
+            "StartX": 1.0,
+            "EndX": 1.0,
+            "EndY": 361.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Round"
+          },
+          {
+            "Type": "Line",
+            "Name": "line4",
+            "Y": 380,
+            "Width": 674,
+            "Height": 50,
+            "Color": {
+              "Red": 166,
+              "Green": 166,
+              "Blue": 166
+            },
+            "StartY": 50.0,
+            "EndX": 674.0,
+            "EndY": 50.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Round"
+          },
+          {
+            "Type": "Line",
+            "Name": "line5",
+            "X": 574,
+            "Y": 69,
+            "Width": 100,
+            "Height": 361,
+            "Color": {
+              "Red": 166,
+              "Green": 166,
+              "Blue": 166
+            },
+            "StartX": 100.0,
+            "EndX": 100.0,
+            "EndY": 361.0,
+            "LineWidth": 3.0,
+            "LineEndingStyle": "Round"
           },
           {
             "Type": "Box",
@@ -253,14 +231,147 @@
             }
           },
           {
-            "Type": "Button",
-            "Name": "button2",
-            "X": 560,
-            "Width": 240,
+            "Type": "ToggleButton",
+            "Name": "ch1",
+            "X": 581,
+            "Y": 13,
+            "Width": 62,
+            "Height": 34,
+            "Pressed": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_on_active.png",
+            "Released": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_off_normal.png"
+          },
+          {
+            "Type": "ToggleButton",
+            "Name": "ch2",
+            "X": 718,
+            "Y": 13,
+            "Width": 62,
+            "Height": 34,
+            "Pressed": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_on_active.png",
+            "Released": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_off_normal.png"
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea2",
+            "X": 532,
+            "Y": 18,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_TDG0",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 24,
+              "Green": 200,
+              "Blue": 219
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea3",
+            "X": 663,
+            "Y": 18,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_LW6O",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 212,
+              "Green": 180,
+              "Blue": 19
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "BoxWithBorder",
+            "Name": "boxWithBorder1",
+            "X": 684,
+            "Y": 69,
+            "Width": 108,
+            "Height": 171,
+            "Color": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "BorderColor": {
+              "Red": 24,
+              "Green": 200,
+              "Blue": 219
+            },
+            "BorderSize": 3
+          },
+          {
+            "Type": "BoxWithBorder",
+            "Name": "boxWithBorder2",
+            "X": 684,
+            "Y": 254,
+            "Width": 108,
+            "Height": 176,
+            "Color": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "BorderColor": {
+              "Red": 212,
+              "Green": 180,
+              "Blue": 19
+            },
+            "BorderSize": 3
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea4",
+            "X": 688,
+            "Y": 70,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_MEB3",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 24,
+              "Green": 200,
+              "Blue": 219
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea5",
+            "X": 688,
+            "Y": 254,
+            "Width": 42,
+            "Height": 24,
+            "TextId": "__SingleUse_TKBN",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 212,
+              "Green": 180,
+              "Blue": 19
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "ButtonWithLabel",
+            "Name": "buttonWithLabel1",
+            "X": 345,
+            "Width": 175,
             "Height": 50,
-            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_pressed.png",
-            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_normal.png",
-            "Preset": "alternate_theme\\presets\\button\\regular\\height_50\\medium_rounded_normal.json"
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_normal.png",
+            "TextId": "__SingleUse_I0V3",
+            "ReleasedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "PressedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "TextRotation": "0"
           }
         ],
         "Interactions": [
@@ -314,7 +425,8 @@
           {
             "Type": "Button",
             "Name": "button1",
-            "X": 623,
+            "X": 625,
+            "Y": 151,
             "Width": 175,
             "Height": 50,
             "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_normal.png",
@@ -323,8 +435,8 @@
           {
             "Type": "TextArea",
             "Name": "textArea1",
-            "X": 686,
-            "Y": 13,
+            "X": 695,
+            "Y": 165,
             "Width": 48,
             "Height": 24,
             "TextId": "__SingleUse_0ZQO",
@@ -335,221 +447,6 @@
               "Blue": 240
             },
             "AutoSize": true
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph1",
-            "X": 96,
-            "Y": 6,
-            "Width": 520,
-            "Height": 50,
-            "DataSeed": -398524644,
-            "NumberOfValues": 128,
-            "MaxY": 1.0,
-            "Precision": "1",
-            "LastIndex": 127,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 20,
-                  "Green": 151,
-                  "Blue": 197
-                }
-              }
-            ]
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph2",
-            "X": 96,
-            "Y": 62,
-            "Width": 520,
-            "Height": 50,
-            "DataSeed": -1735953241,
-            "NumberOfValues": 128,
-            "MaxY": 1.0,
-            "Precision": "1",
-            "LastIndex": 127,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 35,
-                  "Green": 204,
-                  "Blue": 22
-                }
-              }
-            ]
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph3",
-            "X": 96,
-            "Y": 119,
-            "Width": 520,
-            "Height": 50,
-            "DataSeed": 5758044,
-            "NumberOfValues": 128,
-            "MaxY": 1.0,
-            "Precision": "1",
-            "LastIndex": 127,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 196,
-                  "Green": 22,
-                  "Blue": 22
-                }
-              }
-            ]
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph4",
-            "X": 96,
-            "Y": 176,
-            "Width": 520,
-            "Height": 50,
-            "DataSeed": -1884062577,
-            "NumberOfValues": 128,
-            "MaxY": 1.0,
-            "Precision": "1",
-            "LastIndex": 127,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 118,
-                  "Green": 22,
-                  "Blue": 196
-                }
-              }
-            ]
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph5",
-            "X": 96,
-            "Y": 238,
-            "Width": 520,
-            "Height": 50,
-            "DataSeed": 116890188,
-            "NumberOfValues": 128,
-            "MaxY": 1.0,
-            "Precision": "1",
-            "LastIndex": 127,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 196,
-                  "Green": 170,
-                  "Blue": 22
-                }
-              }
-            ]
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph6",
-            "X": 96,
-            "Y": 295,
-            "Width": 520,
-            "Height": 50,
-            "DataSeed": 211960612,
-            "NumberOfValues": 128,
-            "MaxY": 1.0,
-            "Precision": "1",
-            "LastIndex": 127,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Green": 158,
-                  "Blue": 126
-                }
-              }
-            ]
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph7",
-            "X": 96,
-            "Y": 354,
-            "Width": 520,
-            "Height": 50,
-            "DataSeed": -938417141,
-            "NumberOfValues": 128,
-            "MaxY": 1.0,
-            "Precision": "1",
-            "LastIndex": 127,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 196,
-                  "Green": 109,
-                  "Blue": 22
-                }
-              }
-            ]
-          },
-          {
-            "Type": "DynamicGraph",
-            "Name": "dynamicGraph8",
-            "X": 96,
-            "Y": 412,
-            "Width": 520,
-            "Height": 50,
-            "DataSeed": 975313358,
-            "NumberOfValues": 128,
-            "MaxY": 1.0,
-            "Precision": "1",
-            "LastIndex": 127,
-            "XAxisScale": 1.0,
-            "GraphType": "GraphWrapOverwrite",
-            "GraphDrawers": [
-              {
-                "Type": "LineDrawer",
-                "LineWidth": 2,
-                "FileNameImage": "",
-                "Color": {
-                  "Red": 196,
-                  "Green": 14,
-                  "Blue": 181
-                }
-              }
-            ]
           },
           {
             "Type": "TextArea",
@@ -821,6 +718,37 @@
             "EndY": 50.0,
             "LineWidth": 3.0,
             "LineEndingStyle": "Square"
+          },
+          {
+            "Type": "ButtonWithLabel",
+            "Name": "Setting",
+            "X": 625,
+            "Y": 74,
+            "Width": 175,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_normal.png",
+            "TextId": "__SingleUse_R7ZP",
+            "ReleasedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "PressedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "TextRotation": "0"
+          },
+          {
+            "Type": "ToggleButton",
+            "Name": "toggleButton1",
+            "X": 657,
+            "Width": 138,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_togglebutton_medium_rounded_text_on_light.png",
+            "Released": "__generated\\alternate_theme_images_widgets_togglebutton_medium_rounded_text_off_normal.png"
           }
         ],
         "Interactions": [
@@ -835,6 +763,106 @@
               "ScreenTransitionType": "ScreenTransitionSlide",
               "ScreenTransitionDirection": "East",
               "ActionComponent": "start_screen"
+            }
+          },
+          {
+            "InteractionName": "Interaction2",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "Setting"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionSlide",
+              "ScreenTransitionDirection": "East",
+              "ActionComponent": "Logic_Setting"
+            }
+          }
+        ]
+      },
+      {
+        "Name": "Logic_Setting",
+        "Components": [
+          {
+            "Type": "Box",
+            "Name": "box1",
+            "Width": 800,
+            "Height": 480,
+            "Color": {
+              "Red": 8,
+              "Green": 7,
+              "Blue": 7
+            }
+          },
+          {
+            "Type": "ButtonWithLabel",
+            "Name": "cancel",
+            "Width": 240,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_normal.png",
+            "TextId": "__SingleUse_TTPT",
+            "ReleasedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "PressedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "TextRotation": "0",
+            "Preset": "alternate_theme\\presets\\button\\regular\\height_50\\medium_rounded_normal.json"
+          },
+          {
+            "Type": "ButtonWithLabel",
+            "Name": "save",
+            "X": 560,
+            "Width": 240,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_normal.png",
+            "TextId": "__SingleUse_8GCD",
+            "ReleasedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "PressedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "TextRotation": "0",
+            "Preset": "alternate_theme\\presets\\button\\regular\\height_50\\medium_rounded_normal.json"
+          }
+        ],
+        "Interactions": [
+          {
+            "InteractionName": "Interaction1",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "cancel"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionSlide",
+              "ScreenTransitionDirection": "East",
+              "ActionComponent": "Logic"
+            }
+          },
+          {
+            "InteractionName": "Interaction2",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "save"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionSlide",
+              "ScreenTransitionDirection": "East",
+              "ActionComponent": "Logic_Setting"
             }
           }
         ]

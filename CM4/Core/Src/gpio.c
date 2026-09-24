@@ -113,7 +113,7 @@ void MX_GPIO_Init(void)
   HAL_GPIO_Init(M4_LED_GPIO_Port, &GPIO_InitStruct);
 
   /*AnalogSwitch Config */
-  HAL_SYSCFG_AnalogSwitchConfig(SYSCFG_SWITCH_PA1, SYSCFG_SWITCH_PA1_CLOSE);
+  // HAL_SYSCFG_AnalogSwitchConfig(SYSCFG_SWITCH_PA1, SYSCFG_SWITCH_PA1_CLOSE);
 
 }
 

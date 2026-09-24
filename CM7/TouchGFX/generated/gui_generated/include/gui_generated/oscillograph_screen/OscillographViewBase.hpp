@@ -10,10 +10,10 @@
 #include <touchgfx/widgets/Box.hpp>
 #include <touchgfx/widgets/Button.hpp>
 #include <touchgfx/widgets/TextArea.hpp>
-#include <touchgfx/widgets/BoxWithBorder.hpp>
-#include <touchgfx/widgets/graph/GraphWrapAndOverwrite.hpp>
-#include <touchgfx/widgets/graph/GraphElements.hpp>
+#include <touchgfx/widgets/canvas/Line.hpp>
 #include <touchgfx/widgets/canvas/PainterRGB565.hpp>
+#include <touchgfx/widgets/ToggleButton.hpp>
+#include <touchgfx/widgets/BoxWithBorder.hpp>
 
 class OscillographViewBase : public touchgfx::View<OscillographPresenter>
 {
@@ -34,18 +34,25 @@ protected:
     touchgfx::Box box1;
     touchgfx::Button button1;
     touchgfx::TextArea textArea1;
-    touchgfx::BoxWithBorder boxWithBorder1;
-    touchgfx::GraphWrapAndOverwrite<512> dynamicGraph1;
-    touchgfx::GraphElementLine dynamicGraph1Line1;
-    touchgfx::PainterRGB565 dynamicGraph1Line1Painter;
-    touchgfx::GraphWrapAndOverwrite<512> dynamicGraph2;
-    touchgfx::GraphElementGridX dynamicGraph2MajorXAxisGrid;
-    touchgfx::GraphElementGridY dynamicGraph2MajorYAxisGrid;
-    touchgfx::GraphElementLine dynamicGraph2Line1;
-    touchgfx::PainterRGB565 dynamicGraph2Line1Painter;
-    touchgfx::Box box2;
+    touchgfx::Line line1;
+    touchgfx::PainterRGB565 line1Painter;
+    touchgfx::Line line2;
+    touchgfx::PainterRGB565 line2Painter;
+    touchgfx::Line line3;
+    touchgfx::PainterRGB565 line3Painter;
+    touchgfx::Line line4;
+    touchgfx::PainterRGB565 line4Painter;
+    touchgfx::Line line5;
+    touchgfx::PainterRGB565 line5Painter;
     touchgfx::Box box3;
-    touchgfx::Button button2;
+    touchgfx::ToggleButton ch1;
+    touchgfx::ToggleButton ch2;
+    touchgfx::TextArea textArea2;
+    touchgfx::TextArea textArea3;
+    touchgfx::BoxWithBorder boxWithBorder1;
+    touchgfx::BoxWithBorder boxWithBorder2;
+    touchgfx::TextArea textArea4;
+    touchgfx::TextArea textArea5;
 
 private:
 

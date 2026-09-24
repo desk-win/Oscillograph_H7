@@ -22,6 +22,15 @@
  * 不要写成"两路共用一个字、各改各的位" —— 目前两个 ADC 走 DMA1_Stream0/1
  * 且同为抢占优先级 0 (CM4/Core/Src/dma.c), 不会互相打断所以读改写侥幸安全,
  * 但这条约束一旦被改动就会变成静默丢位。
+ *
+ * ── 动这个结构体的时候 ──
+ * 两个核各编译一份, 靠偏移量对上, 而 magic 目前没人检查 (只打印出来看一眼)。
+ * 所以改了字段就得两个核一起重新烧 —— 只烧一个不会报任何错, 表现是各种数值
+ * 莫名其妙地乱跳, 很难往"ABI 对不上"上想。
+ *
+ * 当前这一版把原来的 cfg_run 拆成了 cfg_run_ch1 / cfg_run_ch2 (两个通道分别
+ * 启停), 用的是末尾那格 reserved —— 总大小还是 96 字节, 但 diag_* 的偏移
+ * 全都前移了一个字。
  * ========================================================================= */
 
 #define OSC_SHARED_MAGIC      0x4F534332u     /* 'OSC2': 拆出每通道电平 + 自适应电平诊断 */
@@ -40,6 +49,9 @@
 #define OSC_WORDS_PER_SEC     3125000u        /* 1e9 / 320 */
 
 #define OSC_HSEM_ID           1u              /* ID_0 被双核 boot 同步占用 */
+/* 信号量号 → 使能寄存器里的位。等价于 HAL 自己的 __HAL_HSEM_SEMID_TO_MASK,
+ * 写在这里是为了让 CM4 那边也能用 (CM4 不 include HAL 的 hsem 头)。 */
+#define OSC_HSEM_MASK         (1u << OSC_HSEM_ID)
 #define OSC_TRIG_NONE         0xFFFFFFFFu
 
 typedef struct {
@@ -57,7 +69,8 @@ typedef struct {
     uint32_t cfg_trig_hyst;     /* 迟滞半宽, LSB; 只压在"武装"侧, 不压触发阈值 */
     uint32_t cfg_trig_edge;     /* 0 = 上升沿, 1 = 下降沿 */
     uint32_t cfg_trig_enable;
-    uint32_t cfg_run;           /* 0 = 停止采集 */
+    uint32_t cfg_run_ch1;       /* 0 = 停止 CH1 采集 */
+    uint32_t cfg_run_ch2;       /* 0 = 停止 CH2 采集 */
 
     /* ---- 诊断: 每通道一份, 各自只有本通道的中断/主循环在写 ---- */
     uint32_t diag_ovr_ch1;
@@ -72,8 +85,6 @@ typedef struct {
     uint32_t diag_min_ch2;
     uint32_t diag_max_ch2;
     uint32_t diag_level_ch2;
-
-    uint32_t reserved[1];       /* 占位, 免得下次加字段又要动 ABI */
 } osc_ctrl_t;                   /* 24 word = 96 B */
 
 #define OSC_CTRL ((volatile osc_ctrl_t *)OSC_CTRL_ADDR)

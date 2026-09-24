@@ -23,6 +23,8 @@
 #include <TouchGFXHAL.hpp>
 
 /* USER CODE BEGIN TouchGFXHAL.cpp */
+/* 渲染耗时探针。调完和 osc_probe 一起删, 见 osc_probe.h 的文件头。 */
+#include "osc_probe.h"
 
 using namespace touchgfx;
 
@@ -150,12 +152,24 @@ void TouchGFXHAL::enableLCDControllerInterrupt()
 
 bool TouchGFXHAL::beginFrame()
 {
+    /* 渲染耗时探针的起点。这一对函数正好把"一帧的画"整个夹在中间 ——
+     * 见 osc_probe.h 里 g_dbg_render_cyc 的说明。 */
+    g_dbg_begin_cyc = OSC_PROBE_CYC;
+
     return TouchGFXGeneratedHAL::beginFrame();
 }
 
 void TouchGFXHAL::endFrame()
 {
     TouchGFXGeneratedHAL::endFrame();
+
+    /* 掐表。用减法, 所以能跨 DWT 的 8.9 秒回绕 (一次重画 2.67 秒还够不着它)。 */
+    const uint32_t d = OSC_PROBE_CYC - g_dbg_begin_cyc;
+    g_dbg_render_cyc = d;
+    if (d > g_dbg_render_max_cyc)
+    {
+        g_dbg_render_max_cyc = d;
+    }
 }
 
 /* USER CODE END TouchGFXHAL.cpp */

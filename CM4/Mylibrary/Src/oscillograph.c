@@ -54,7 +54,8 @@ static void ctrl_defaults(void)
     osc_ctrl.cfg_trig_hyst      = 16u;
     osc_ctrl.cfg_trig_edge      = 0u;      /* 上升沿 */
     osc_ctrl.cfg_trig_enable    = 0u;
-    osc_ctrl.cfg_run            = 0u;
+    osc_ctrl.cfg_run_ch1        = 0u;      /* 两个通道各自启停, 上电都是停 */
+    osc_ctrl.cfg_run_ch2        = 0u;
 
     osc_ctrl.diag_ovr_ch1    = 0u;
     osc_ctrl.diag_ovr_ch2    = 0u;
@@ -67,7 +68,6 @@ static void ctrl_defaults(void)
     osc_ctrl.diag_min_ch2    = 0u;
     osc_ctrl.diag_max_ch2    = 0u;
     osc_ctrl.diag_level_ch2  = 0u;
-    osc_ctrl.reserved[0]     = 0u;
 }
 
 /**
@@ -386,29 +386,38 @@ static void osc_scan_half(uint32_t ch, uint32_t half)
 */
 void OSC_CH_Poll(void)
 {
-    if (!osc_ctrl.cfg_run) {
-        /* 停止采集: 把游标对齐, 免得恢复时把积压的旧半帧一次性补扫 */
+    /* 两个通道各有各的闸。停掉的那一路什么都不做 —— 不扫描、不发布、不通知
+     * CM7, 于是它的 seq 不涨、SDRAM 环里也不再进新数据。屏幕上那一路怎么
+     * 处理是另一回事 (由 View 直接擦掉, 不等这里)。
+     *
+     * 注意 ADC 和 DMA 从 OSC_CH_Init() 起就一直开着, 这里说的"停"只是不去
+     * 看它 —— 硬件照常在采、D2 缓冲照常被绕回来覆盖, 都无所谓。
+     *
+     * 停着的那一路仍然要把游标对齐, 否则重新打开时会把积压的半帧一次性补扫。 */
+    if (!osc_ctrl.cfg_run_ch1) {
         s_processed_ch1 = s_completed_ch1;
+    } else {
+        /* 落后 ≥2 个半帧 = 想扫的那半已经被 DMA 绕回来覆盖了, 只能丢;
+         * 只处理最新那半帧, diag_miss 只多不少(偏保守, 不静默) */
+        uint32_t done1 = s_completed_ch1;               /* 32 位读写原子, 取一次快照 */
+        uint32_t lag1  = done1 - s_processed_ch1;
+        if (lag1 != 0u) {
+            if (lag1 > 1u) osc_ctrl.diag_miss += lag1 - 1u;
+            s_processed_ch1 = done1;
+            osc_scan_half(0u, (done1 - 1u) & 1u);
+        }
+    }
+
+    if (!osc_ctrl.cfg_run_ch2) {
         s_processed_ch2 = s_completed_ch2;
-        return;
-    }
-
-    /* 落后 ≥2 个半帧 = 想扫的那半已经被 DMA 绕回来覆盖了, 只能丢;
-     * 只处理最新那半帧, diag_miss 只多不少(偏保守, 不静默) */
-    uint32_t done1 = s_completed_ch1;                   /* 32 位读写原子, 取一次快照 */
-    uint32_t lag1  = done1 - s_processed_ch1;
-    if (lag1 != 0u) {
-        if (lag1 > 1u) osc_ctrl.diag_miss += lag1 - 1u;
-        s_processed_ch1 = done1;
-        osc_scan_half(0u, (done1 - 1u) & 1u);
-    }
-
-    uint32_t done2 = s_completed_ch2;
-    uint32_t lag2  = done2 - s_processed_ch2;
-    if (lag2 != 0u) {
-        if (lag2 > 1u) osc_ctrl.diag_miss += lag2 - 1u;
-        s_processed_ch2 = done2;
-        osc_scan_half(1u, (done2 - 1u) & 1u);
+    } else {
+        uint32_t done2 = s_completed_ch2;
+        uint32_t lag2  = done2 - s_processed_ch2;
+        if (lag2 != 0u) {
+            if (lag2 > 1u) osc_ctrl.diag_miss += lag2 - 1u;
+            s_processed_ch2 = done2;
+            osc_scan_half(1u, (done2 - 1u) & 1u);
+        }
     }
 }
 

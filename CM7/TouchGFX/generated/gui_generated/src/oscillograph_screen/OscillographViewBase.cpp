@@ -31,60 +31,98 @@ OscillographViewBase::OscillographViewBase() :
     textArea1.setTypedText(touchgfx::TypedText(T___SINGLEUSE_O369));
     add(textArea1);
 
-    boxWithBorder1.setPosition(0, 69, 674, 361);
-    boxWithBorder1.setColor(touchgfx::Color::getColorFromRGB(13, 12, 12));
-    boxWithBorder1.setBorderColor(touchgfx::Color::getColorFromRGB(166, 166, 166));
-    boxWithBorder1.setBorderSize(3);
-    add(boxWithBorder1);
+    line1.setPosition(0, 249, 674, 55);
+    line1Painter.setColor(touchgfx::Color::getColorFromRGB(166, 166, 166));
+    line1.setPainter(line1Painter);
+    line1.setStart(0, 0);
+    line1.setEnd(674, 0);
+    line1.setLineWidth(2);
+    line1.setLineEndingStyle(touchgfx::Line::ROUND_CAP_ENDING);
+    add(line1);
 
-    dynamicGraph1.setPosition(0, 69, 674, 361);
-    dynamicGraph1.setScale(1);
-    dynamicGraph1.setGraphAreaMargin(0, 0, 0, 0);
-    dynamicGraph1.setGraphAreaPadding(0, 0, 0, 0);
-    dynamicGraph1.setGraphRangeY(0, 4096);
-    dynamicGraph1Line1Painter.setColor(touchgfx::Color::getColorFromRGB(20, 151, 197));
-    dynamicGraph1Line1.setPainter(dynamicGraph1Line1Painter);
-    dynamicGraph1Line1.setLineWidth(2);
-    dynamicGraph1.addGraphElement(dynamicGraph1Line1);
+    line2.setPosition(0, 69, 674, 50);
+    line2Painter.setColor(touchgfx::Color::getColorFromRGB(166, 166, 166));
+    line2.setPainter(line2Painter);
+    line2.setStart(0, 0);
+    line2.setEnd(674, 0);
+    line2.setLineWidth(3);
+    line2.setLineEndingStyle(touchgfx::Line::ROUND_CAP_ENDING);
+    add(line2);
 
+    line3.setPosition(0, 69, 96, 361);
+    line3Painter.setColor(touchgfx::Color::getColorFromRGB(166, 166, 166));
+    line3.setPainter(line3Painter);
+    line3.setStart(1, 0);
+    line3.setEnd(1, 361);
+    line3.setLineWidth(3);
+    line3.setLineEndingStyle(touchgfx::Line::ROUND_CAP_ENDING);
+    add(line3);
 
-    add(dynamicGraph1);
+    line4.setPosition(0, 380, 674, 50);
+    line4Painter.setColor(touchgfx::Color::getColorFromRGB(166, 166, 166));
+    line4.setPainter(line4Painter);
+    line4.setStart(0, 50);
+    line4.setEnd(674, 50);
+    line4.setLineWidth(3);
+    line4.setLineEndingStyle(touchgfx::Line::ROUND_CAP_ENDING);
+    add(line4);
 
-    dynamicGraph2.setPosition(0, 69, 674, 361);
-    dynamicGraph2.setScale(1);
-    dynamicGraph2.setGraphAreaMargin(0, 0, 0, 0);
-    dynamicGraph2.setGraphAreaPadding(0, 0, 0, 0);
-    dynamicGraph2.setGraphRangeY(0, 4096);
-    dynamicGraph2MajorXAxisGrid.setColor(touchgfx::Color::getColorFromRGB(166, 166, 166));
-    dynamicGraph2MajorXAxisGrid.setInterval(85);
-    dynamicGraph2MajorXAxisGrid.setLineWidth(1);
-    dynamicGraph2MajorXAxisGrid.setScale(1);
-    dynamicGraph2.addGraphElement(dynamicGraph2MajorXAxisGrid);
-
-    dynamicGraph2MajorYAxisGrid.setColor(touchgfx::Color::getColorFromRGB(166, 166, 166));
-    dynamicGraph2MajorYAxisGrid.setInterval(453);
-    dynamicGraph2MajorYAxisGrid.setLineWidth(1);
-    dynamicGraph2MajorYAxisGrid.setScale(1);
-    dynamicGraph2.addGraphElement(dynamicGraph2MajorYAxisGrid);
-
-    dynamicGraph2Line1Painter.setColor(touchgfx::Color::getColorFromRGB(214, 208, 30));
-    dynamicGraph2Line1.setPainter(dynamicGraph2Line1Painter);
-    dynamicGraph2Line1.setLineWidth(2);
-    dynamicGraph2.addGraphElement(dynamicGraph2Line1);
-
-    add(dynamicGraph2);
-
-    box2.setPosition(684, 69, 108, 361);
-    box2.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
-    add(box2);
+    line5.setPosition(574, 69, 100, 361);
+    line5Painter.setColor(touchgfx::Color::getColorFromRGB(166, 166, 166));
+    line5.setPainter(line5Painter);
+    line5.setStart(100, 0);
+    line5.setEnd(100, 361);
+    line5.setLineWidth(3);
+    line5.setLineEndingStyle(touchgfx::Line::ROUND_CAP_ENDING);
+    add(line5);
 
     box3.setPosition(0, 437, 792, 43);
     box3.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
     add(box3);
 
-    button2.setXY(560, 0);
-    button2.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_MEDIUM_ROUNDED_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_MEDIUM_ROUNDED_PRESSED_ID));
-    add(button2);
+    ch1.setXY(581, 13);
+    ch1.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_OFF_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_ON_ACTIVE_ID));
+    add(ch1);
+
+    ch2.setXY(718, 13);
+    ch2.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_OFF_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_ON_ACTIVE_ID));
+    add(ch2);
+
+    textArea2.setXY(532, 18);
+    textArea2.setColor(touchgfx::Color::getColorFromRGB(24, 200, 219));
+    textArea2.setLinespacing(0);
+    textArea2.setTypedText(touchgfx::TypedText(T___SINGLEUSE_TDG0));
+    add(textArea2);
+
+    textArea3.setXY(663, 18);
+    textArea3.setColor(touchgfx::Color::getColorFromRGB(212, 180, 19));
+    textArea3.setLinespacing(0);
+    textArea3.setTypedText(touchgfx::TypedText(T___SINGLEUSE_LW6O));
+    add(textArea3);
+
+    boxWithBorder1.setPosition(684, 69, 108, 171);
+    boxWithBorder1.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    boxWithBorder1.setBorderColor(touchgfx::Color::getColorFromRGB(24, 200, 219));
+    boxWithBorder1.setBorderSize(3);
+    add(boxWithBorder1);
+
+    boxWithBorder2.setPosition(684, 254, 108, 176);
+    boxWithBorder2.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    boxWithBorder2.setBorderColor(touchgfx::Color::getColorFromRGB(212, 180, 19));
+    boxWithBorder2.setBorderSize(3);
+    add(boxWithBorder2);
+
+    textArea4.setXY(684, 70);
+    textArea4.setColor(touchgfx::Color::getColorFromRGB(24, 200, 219));
+    textArea4.setLinespacing(0);
+    textArea4.setTypedText(touchgfx::TypedText(T___SINGLEUSE_MEB3));
+    add(textArea4);
+
+    textArea5.setXY(688, 254);
+    textArea5.setColor(touchgfx::Color::getColorFromRGB(212, 180, 19));
+    textArea5.setLinespacing(0);
+    textArea5.setTypedText(touchgfx::TypedText(T___SINGLEUSE_TKBN));
+    add(textArea5);
 }
 
 OscillographViewBase::~OscillographViewBase()

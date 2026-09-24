@@ -12,8 +12,6 @@
 #include <touchgfx/widgets/canvas/PainterRGB565.hpp>
 #include <touchgfx/widgets/Button.hpp>
 #include <touchgfx/widgets/TextArea.hpp>
-#include <touchgfx/widgets/graph/GraphWrapAndOverwrite.hpp>
-#include <touchgfx/widgets/graph/GraphElements.hpp>
 
 class LogicViewBase : public touchgfx::View<LogicPresenter>
 {
@@ -36,30 +34,6 @@ protected:
     touchgfx::PainterRGB565 line2_1Painter;
     touchgfx::Button button1;
     touchgfx::TextArea textArea1;
-    touchgfx::GraphWrapAndOverwrite<128> dynamicGraph1;
-    touchgfx::GraphElementLine dynamicGraph1Line1;
-    touchgfx::PainterRGB565 dynamicGraph1Line1Painter;
-    touchgfx::GraphWrapAndOverwrite<128> dynamicGraph2;
-    touchgfx::GraphElementLine dynamicGraph2Line1;
-    touchgfx::PainterRGB565 dynamicGraph2Line1Painter;
-    touchgfx::GraphWrapAndOverwrite<128> dynamicGraph3;
-    touchgfx::GraphElementLine dynamicGraph3Line1;
-    touchgfx::PainterRGB565 dynamicGraph3Line1Painter;
-    touchgfx::GraphWrapAndOverwrite<128> dynamicGraph4;
-    touchgfx::GraphElementLine dynamicGraph4Line1;
-    touchgfx::PainterRGB565 dynamicGraph4Line1Painter;
-    touchgfx::GraphWrapAndOverwrite<128> dynamicGraph5;
-    touchgfx::GraphElementLine dynamicGraph5Line1;
-    touchgfx::PainterRGB565 dynamicGraph5Line1Painter;
-    touchgfx::GraphWrapAndOverwrite<128> dynamicGraph6;
-    touchgfx::GraphElementLine dynamicGraph6Line1;
-    touchgfx::PainterRGB565 dynamicGraph6Line1Painter;
-    touchgfx::GraphWrapAndOverwrite<128> dynamicGraph7;
-    touchgfx::GraphElementLine dynamicGraph7Line1;
-    touchgfx::PainterRGB565 dynamicGraph7Line1Painter;
-    touchgfx::GraphWrapAndOverwrite<128> dynamicGraph8;
-    touchgfx::GraphElementLine dynamicGraph8Line1;
-    touchgfx::PainterRGB565 dynamicGraph8Line1Painter;
     touchgfx::TextArea textArea2;
     touchgfx::TextArea textArea3;
     touchgfx::TextArea textArea4;

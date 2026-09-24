@@ -53,6 +53,15 @@ include("mx-generated.cmake")
 # Add touchgfx generated sources and libraries
 add_subdirectory(cmake/touchgfx)
 
+# TouchGFX 的 gui 源码是编译进 TouchGFX 这个 OBJECT 库的 (见 cmake/touchgfx),
+# 它只从 stm32cubemx 这个 INTERFACE 库继承 include 路径, 所以看不到上面加给
+# 可执行文件的 Mylibrary/Inc。这里补一条, 好让 Model/View 那边能 include 到
+# 自己库的头。cmake/touchgfx/CMakeLists.txt 是 Designer 生成的, 不能改。
+target_include_directories(stm32cubemx INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Common/Inc
+)
+
 
 # In order to use CMake for cross-compiling
 set(CMAKE_CXX_COMPILER_FORCED "true")
@@ -78,7 +87,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/mylcd.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/touch.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/uart_printf.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/osc_probe.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/oscillograph.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/oscillograph_trace.c
 )
 
 # Link directories setup
