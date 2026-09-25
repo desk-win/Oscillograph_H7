@@ -112,9 +112,22 @@ void OSC_Trace_Start(osc_trace_ch_t ch)
      * 那段 655 µs 前的旧数据会被拼进新波形里, 屏幕上看得出接缝。 */
     M7_OSC_SyncCh(c);
 
+    /* 触发是"相位固定"的唯一来源: 不打开这一位, CM4 就只采不找触发点,
+     * trig_pos_* 恒为 OSC_TRIG_NONE、trig_flags 恒为 0, 于是 trig_poll 永远
+     * 收不到候选、locked 永远不置起, window_start 只能一路走自由运行 ——
+     * 窗口贴着写指针走, 每次重画相位随机, 屏幕上就是波形在跳。
+     *
+     * 这个字段归 CM7 写 (见 sharedconfig.h 的写者约定), 所以在这里置, 而不是
+     * 去改 CM4 的 ctrl_defaults。
+     *
+     * 代价在 CM4 那边: 每个半帧 (655 µs) 要多跑 CH1 的 4096 次 + CH2 的 2048 次
+     * 迟滞比较。扛不住的表现是 diag_rate_* 掉下来、或 diag_ovr / diag_miss 开始
+     * 涨 (环上出现空洞, 波形成片断裂)。 */
+    __DMB();
+    OSC_CTRL->cfg_trig_enable = 1u;
+
     /* cfg_run_chN 这个字段只有一个写者 (CM7), CM4 只读 —— 这是两核之间不用
      * 加锁的前提。DMB 保证这条写先于后面任何一次搬运被 CM4 看到。 */
-    __DMB();
     if (ch == OSC_TRACE_CH1) { OSC_CTRL->cfg_run_ch1 = 1u; }
     else                     { OSC_CTRL->cfg_run_ch2 = 1u; }
     __DMB();
@@ -204,6 +217,22 @@ static void trig_poll(uint32_t ch)
             age < OSC_RING_WORDS) {
             t->trig      = t->cand;
             t->locked    = 1u;
+            t->cand_held = 0u;
+        } else if (t->cand < OSC_TRACE_PRE_WORDS ||
+                   (t->cand < latest && age >= OSC_RING_WORDS)) {
+            /* 这个候选永远等不到能用的那一天了, 必须把位置让出来 —— 一直
+             * 占着的话 cand_held 永不落, 后面来的触发一个都进不来, 屏幕从
+             * 此只能自由运行, 而且再也不会自己恢复。两种情形:
+             *
+             *   cand < PRE_WORDS    环里它左边根本没有 2048 个 word 可显示
+             *                       (只可能出现在开机后头一个半帧上), 再等
+             *                       也一样;
+             *   cand < latest 且已老过一整圈
+             *                       两次 trig_poll 之间隔了超过 1.34 s, 它
+             *                       左边那段已经被写指针绕回去盖掉了。
+             *
+             * cand >= latest 时 age 是借位出来的巨大值 —— 刚冻上的那一刻就是
+             * 这样, 属正常, 不能清。 */
             t->cand_held = 0u;
         }
     }

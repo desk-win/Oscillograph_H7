@@ -60,8 +60,11 @@ typedef enum {
     OSC_TRACE_CH2 = 1    /* 折线图 2 */
 } osc_trace_ch_t;
 
-/* 开始采集指定通道: 清掉它的触发锁存, 再把 CM4 那边对应的 cfg_run_chN 置上。
- * 重复调用没有副作用。另一路在不在跑不受影响。 */
+/* 开始采集指定通道: 清掉它的触发锁存, 打开 CM4 的触发扫描 (cfg_trig_enable),
+ * 再把对应的 cfg_run_chN 置上。重复调用没有副作用。另一路在不在跑不受影响。
+ *
+ * cfg_trig_enable 是全局一位 (不分通道): 关着的话 CM4 只采不找触发点, 屏幕上
+ * 的波形永远处于自由运行状态 —— 相位每帧随机换一个, 看起来就是在跳。 */
 void OSC_Trace_Start(osc_trace_ch_t ch);
 
 /* 停止指定通道: 只清它的 cfg_run_chN。环里的数据不动 —— 屏幕上那一路怎么

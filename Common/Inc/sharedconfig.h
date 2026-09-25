@@ -57,7 +57,17 @@
 typedef struct {
     /* ---- CM4 写, CM7 读 ---- */
     uint32_t magic;             /* 必须 == OSC_SHARED_MAGIC */
-    uint32_t seq_ch1;           /* 每发布一个半帧 +1; 第 n 次发布对应半帧 (n-1) & 1 */
+
+    /* seq_chN —— 相位对齐全靠这一条, 改之前先读 CM4 osc_scan_half 的头注释。
+     *
+     * 它跟着 DMA 完成计数走: 每个半帧 +1, 主循环漏掉的半帧也算进去, 所以不是
+     * "发布了几次"。这样 (seq-1)&1 才等于刚扫过、可以安全搬走的那一格 D2
+     * 缓冲 —— 也就是 CM7 该搬的那一格; (seq-1)*OSC_HALF_WORDS + pos 才是这个
+     * 触发点在环里的绝对位置。
+     *
+     * 代价是两边必须一直同奇偶: CM4 在通道刚被打开时对齐一次, 之后两边都按
+     * lag 递增, 关系自然保持。 */
+    uint32_t seq_ch1;
     uint32_t seq_ch2;
     uint32_t trig_pos_ch1;      /* 半帧内触发点下标; OSC_TRIG_NONE = 本帧无 */
     uint32_t trig_pos_ch2;      /* CH1 是 word 下标, CH2 是样本下标 —— 量纲不同! */

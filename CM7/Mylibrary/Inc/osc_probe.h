@@ -13,33 +13,21 @@
  *   2) StartDefaultTask 里每秒调一次 OSC_Probe_Report()。
  *   3) 串口 (USART1, 115200-8N1) 上就会每秒出一行。
  *
- * 打出来的东西:
- *   dt     这一行距上一行过了多久 (us)。累计量 (irq / pushed) 必须除它才能
- *          换算成速率 —— defaultTask 优先级比 TouchGFX 低, 它到底隔多久才
- *          被轮到一次, 光看代码看不出来。
- *   frame  上一帧到这一帧隔了多久 = 当前实际帧周期。不采集时也应该在
- *          15500us 上下 (64 Hz), 采集时它涨多少就是慢了多少。
- *   max    帧周期的历史最大值。若是帧周期的整数倍, 说明是"整帧整帧地没 tick",
- *          不是"每帧慢一点" —— 这两种毛病完全不是一回事。
- *   hdt    HAL 毫秒时基这一窗口走了多少毫秒 (TIM7 驱动)。正常应该 ≈ dt/1000。
- *          对不上就说明 TIM7 被饿过, 所有靠 HAL_GetTick() 的超时 ——
- *          HAL_Delay / 串口 / I2C —— 都会跟着失准, 那正是"卡住"的另一种成因。
- *   ntick  Model::tick() 的累计调用次数。除以 dt 就是真实帧率。
- *   uart   上一次 HAL_UART_Transmit 花了多久 (us)。dt 大的时候用它分辨是
- *          "任务没被调度"还是"发送本身慢"。
- *   isr    CPU 待在中断里的时间 (us), 并集, 见下面 OSC_ISR_Enter 的说明
- *   isrbp  上面那个占 dt 的比例, 单位万分之一 (10000 = 100%)。
- *          实测关采集约 5, 开采集约 53 —— 中断只占 0.05% 和 0.55%, 是清白的。
- *   isrcnt 从任务态进入中断的次数。和 irq 比一下就知道中断是不是全来自 HSEM
- *   build  OSC_Trace_Build × 2, 也就是从 SDRAM 读 16384 个 word 的时间
- *   graph  两个折线图灌点 (clear + 1024×addDataPoint) 的时间
- *   rend   框架自己往显存上画的时间 (beginFrame→endFrame), 上面那三个的余数
- *          的正面证据。采集关掉时是基准值 (几毫秒), 采集开着时看它涨多少
- *   rmax   rend 的历史最大值
- *   stall  帧周期超过 50 ms 的次数。区分"偶发卡一下"和"每隔一会儿就来一下"
- *   irq    CM4 的 HSEM 通知进来了多少次。采集时应该 ≈ 1526×2/秒
- *   chN    pushed / overrun / err / missed, 定义见 oscillograph.h
+ * 打出来的东西 (已经砍到只剩跟"波形不稳"有关的四个数):
+ *   dt     这一行距上一行过了多久 (us)。累计量 (irq / pushed / missed) 必须
+ *          除它才能换算成速率 —— defaultTask 优先级比 TouchGFX 低, 它到底隔
+ *          多久才被轮到一次, 光看代码看不出来。
+ *   irq    CM4 的 HSEM 通知进来了多少次。两路都开时应该 ≈ 3052/秒。明显偏小
+ *          就说明通知被合并或丢掉了 —— 搬运游标会因此落后, missed 涨, 环上
+ *          出现空洞。
+ *   cmiss  CM4 主循环来不及扫而丢掉的半帧数 (diag_miss)。环上的洞就是它凿的。
+ *   chN    pushed / overrun / missed, 定义见 oscillograph.h
  *
+ * 原来还有 frame / max / hdt / ntick / uart / isr / isrbp / isrcnt / build /
+ * graph / rend / rmax / stall / rate1 / rate2 / err —— 那些是上一轮查"屏幕
+ * 卡顿"用的, 跟这次的相位问题无关, 已经从打印里去掉 (底层计数还在更新, 要
+ * 恢复某一列就把对应的 put_kv 加回来)。
+*
  * 调完请把这份一起删掉, 一共四处:
  *   1) CM7/Mylibrary/{Inc/osc_probe.h, Src/osc_probe.c} 两个文件
  *   2) CM7/CMakeLists.txt 里 Src/osc_probe.c 那一行

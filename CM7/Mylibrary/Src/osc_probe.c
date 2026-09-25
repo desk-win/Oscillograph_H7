@@ -67,14 +67,10 @@ static char s_line[512];
 /* 上一次打印的时刻, 用来算 dt */
 static uint32_t s_prevReportCyc;
 
-/* 上一次打印时的中断累计周期数。g_dbg_isr_cyc 是 32 位、按 480 MHz 回绕
- * (8.9 秒一圈), 所以必须取差, 不能直接打。 */
-static uint32_t s_prevIsrCyc;
-
-/* 上一次打印时的 HAL 毫秒计数 (TIM7 驱动的那个)。取差就知道 HAL 的时基
- * 这一窗口里走了多少毫秒 —— 和 dt 对不上的话, 说明 TIM7 被饿过, 所有靠
- * HAL_GetTick() 的超时 (HAL_Delay / UART / I2C) 都会跟着失准。 */
-static uint32_t s_prevHalTick;
+/* 上一次打印时的中断累计周期数 / HAL 毫秒计数。原来用来算 isr/us 和 hdt
+ * 两列 —— 那两列是查渲染卡顿时加的, 跟现在的问题无关, 已经砍掉, 连带这两
+ * 个"上一次的值"一起删。要恢复的话, g_dbg_isr_cyc / HAL_GetTick() 都还在,
+ * 重新取一次差就行。 */
 
 static char *put_str(char *p, const char *s)
 {
@@ -117,6 +113,30 @@ static uint32_t to_us(uint32_t cyc, uint32_t cyc_per_us)
     return cyc / cyc_per_us;
 }
 
+/* ---------------------------------------------------------------------------
+ * 每秒一行, 只剩四个数
+ *
+ * 砍掉的那些列 (MHz / frame / fps / max / min / hdt / ntick / uart / isr /
+ * isrbp / isrcnt / build / graph / rend / rmax / stall / rate1 / rate2 / err)
+ * 是上一轮查"屏幕卡顿"时加的, 跟现在这个"波形只有两三种相位"无关。它们的
+ * 原始计数 (g_dbg_*) 还在各个文件里被更新, 要恢复某一列, 把对应的 put_kv
+ * 加回来即可。
+ *
+ * 一行变短不只是好看: 原来两百多个字符在 115200 下要 20 ms, 而 TouchGFX 的
+ * 一帧才 15.46 ms —— 打印本身就在拖慢被测对象。换句话说, 这个"仪器"的读数
+ * 里掺着仪器自己的重量。越小越好。
+ *
+ * 留下的四个数都是在回答同一个问题: "环上到底有没有洞, 洞是谁造成的"。
+ *   dt     这行是隔了多久打出来的 (累计值除以它就是每秒速率)
+ *   irq    CM7 收到 HSEM 中断的累计次数。两路都开时理论值 2 × 3052/s;
+ *          明显偏小就说明通知被合并或丢掉了 —— 那会让 CH1/CH2 的搬运
+ *          游标落后, 进而 missed 涨、环上出现空洞
+ *   cmiss  CM4 主循环来不及扫而丢掉的半帧数 (就是这个数在环上凿洞)
+ *   chN=   pushed / overrun / missed
+ *            pushed  成功搬进 SDRAM 的半帧数
+ *            overrun MDMA 还没搬完又来通知, 这一帧直接扔掉
+ *            missed  游标落后了多少帧, 也就是被跳过的半帧数
+ * ------------------------------------------------------------------------- */
 void OSC_Probe_Report(void)
 {
     /* SystemCoreClock 由 HAL_RCC_ClockConfig() 更新, 所以这里拿到的是真实
@@ -129,7 +149,7 @@ void OSC_Probe_Report(void)
 
     /* dt = 距上一次打印真正过了多久。
      *
-     * 这一列是关键: 前面几列里 irq / pushed 都是累计值, 只有知道"这一行是
+     * 这一列是关键: irq / pushed / missed 都是累计值, 只有知道"这一行是
      * 隔了多久打出来的", 才能把累计值换算成每秒速率。而 defaultTask 优先级
      * 比 TouchGFX 低, 它到底隔多久才被轮到一次, 光看代码看不出来 —— 必须量。 */
     const uint32_t nowCyc = OSC_PROBE_CYC;
@@ -137,92 +157,27 @@ void OSC_Probe_Report(void)
     const uint32_t dt = to_us(dtCyc, cyc_per_us);
     s_prevReportCyc = nowCyc;
 
-    /* 中断占用: 这一窗口里 CPU 待在中断里的周期数, 以及它占 dt 的百分比。
-     *
-     * isrpct 是这次要看的那个数: 接近 100 就说明任务不是"慢", 是根本轮不上
-     * 被调度 —— CPU 全在中断里。很小 (比如个位数) 就说明任务是真的阻塞在
-     * 别处, 矛头要转向 OSWrappers 那条 vsync 消息队列。
-     *
-     * 百分比用"先除后除"算, 是为了避开 64 位除法 (会拖进 __aeabi_uldivmod,
-     * 而 isrCyc * 100 在 32 位下会溢出)。 */
-    const uint32_t isrCyc = g_dbg_isr_cyc - s_prevIsrCyc;
-    s_prevIsrCyc = g_dbg_isr_cyc;
-    const uint32_t isrUs  = to_us(isrCyc, cyc_per_us);
-
-    /* 用万分之几而不是百分之几 —— 实测只有 0.55%, 按整数百分比算会被
-     * 截断成 0, 看着像"没测到"。10000 = 100%。 */
-    const uint32_t isrBp = (dtCyc >= 10000u) ? (isrCyc / (dtCyc / 10000u)) : 0u;
-
-    /* HAL 毫秒时基这一窗口走了多少毫秒。正常情况下它应该 ≈ dt/1000,
-     * 差得远就说明 TIM7 被饿过 —— 那 HAL_Delay / UART / I2C 的超时全失准。 */
-    const uint32_t halNow = HAL_GetTick();
-    const uint32_t hdt = (s_prevHalTick != 0u) ? (halNow - s_prevHalTick) : 0u;
-    s_prevHalTick = halNow;
-
-    const uint32_t gap = to_us(g_dbg_gap_cyc, cyc_per_us);
-    const uint32_t max = to_us(g_dbg_gap_max_cyc, cyc_per_us);
-    const uint32_t min = to_us(g_dbg_gap_min_cyc, cyc_per_us);
-    const uint32_t bui = to_us(g_dbg_build_cyc, cyc_per_us);
-    const uint32_t grp = to_us(g_dbg_graph_cyc, cyc_per_us);
-    const uint32_t rnd = to_us(g_dbg_render_cyc, cyc_per_us);
-    const uint32_t rmx = to_us(g_dbg_render_max_cyc, cyc_per_us);
-
     char *p = s_line;
 
-    p = put_kv(p, "[osc] MHz", SystemCoreClock / 1000000u);
-    p = put_kv(p, " dt", dt);
-    p = put_kv(p, " frame", gap);
-    p = put_kv(p, " fps", (gap != 0u) ? (1000000u / gap) : 0u);
-    p = put_kv(p, " max", max);
-    p = put_kv(p, " min", min);
-    p = put_str(p, " |");
-    p = put_kv(p, " hdt", hdt);
-    p = put_kv(p, " ntick", g_dbg_tick_cnt);
-    p = put_kv(p, " uart", to_us(g_dbg_uart_cyc, cyc_per_us));
-    p = put_str(p, " |");
-    p = put_kv(p, " isr", isrUs);
-    p = put_kv(p, " isrbp", isrBp);
-    p = put_kv(p, " isrcnt", g_dbg_isr_cnt);
-    p = put_str(p, " |");
-    p = put_kv(p, " build", bui);
-    p = put_kv(p, " graph", grp);
-    p = put_kv(p, " rend", rnd);
-    p = put_kv(p, " rmax", rmx);
-    p = put_str(p, " |");
-    p = put_kv(p, " stall", g_dbg_stall_cnt);
+    p = put_kv(p, "[osc] dt", dt);
     p = put_kv(p, " irq", m7_diag_irq);
-
-    /* CM4 用 DWT 实测的采样率 (Sa/s), 和 CM4 主循环来不及扫的半帧数。
-     * 有了它才能判断 CM4 那边到底按什么速率在发布 —— 光看 CM7 这边的 irq
-     * 累计值是分不出"速率异常"和"打印间隔异常"的。 */
-    p = put_kv(p, " rate1", OSC_CTRL->diag_rate_ch1);
-    p = put_kv(p, " rate2", OSC_CTRL->diag_rate_ch2);
     p = put_kv(p, " cmiss", OSC_CTRL->diag_miss);
 
-    /* pushed / overrun / err / missed */
     p = put_str(p, " | ch1=");
     p = put_u32(p, m7_diag_ch1.pushed);  *p++ = '/';
     p = put_u32(p, m7_diag_ch1.overrun); *p++ = '/';
-    p = put_u32(p, m7_diag_ch1.err);     *p++ = '/';
     p = put_u32(p, m7_diag_ch1.missed);
 
     p = put_str(p, " ch2=");
     p = put_u32(p, m7_diag_ch2.pushed);  *p++ = '/';
     p = put_u32(p, m7_diag_ch2.overrun); *p++ = '/';
-    p = put_u32(p, m7_diag_ch2.err);     *p++ = '/';
     p = put_u32(p, m7_diag_ch2.missed);
 
     p = put_str(p, "\r\n");
 
-    /* 顺序发, 超时给足 —— 一行两百多个字符在 115200 下要 20 ms 上下。
-     *
-     * 掐表是为了把 dt 劈开: 如果这一发真的花了 2.9 秒, 那 dt 就是被它撑大的,
-     * 任务根本没被饿着; 如果只花了二十几毫秒, 那 2.9 秒就是任务真没被调度。
-     *
-     * 注意超时是 200 ms, 而 HAL 的毫秒时基走 TIM7 —— TIM7 被饿住的话这里会
-     * 一直等下去, 所以 uart 这一列同时也是 TIM7 是否健康的一个旁证。 */
-    const uint32_t tUart = OSC_PROBE_CYC;
+    /* 顺序发, 超时给足。原来这里还掐表记 g_dbg_uart_cyc (发一行耗了多少),
+     * 那列已经砍掉 —— 但超时不能省, 而且 HAL 的毫秒时基走 TIM7, TIM7 被饿住
+     * 的话这里会一直等下去。 */
     (void)HAL_UART_Transmit(&huart1, (uint8_t *)s_line,
                             (uint16_t)(p - s_line), 200u);
-    g_dbg_uart_cyc = OSC_PROBE_CYC - tUart;
 }

@@ -209,15 +209,19 @@ SECTIONS
     . = ALIGN(8);
   } >RAM
 
-  .dma_buffer (NOLOAD) :
-  {
-    . = ALIGN(32);
-    _sdma_buffer = .;
-    KEEP(*(.dma_buffer))
-    KEEP(*(.dma_buffer*))
-    . = ALIGN(32);
-    _edma_buffer = .;
-  } >RAM_D2
+  /* 跨核共享缓冲 —— 三个对象的地址是 CM7 那边的硬契约 (见 sharedconfig.h
+   * 的文件头), 所以在这里用绝对地址钉死。
+   *
+   * 原来这三个是共用一个 .dma_buffer 段、靠"谁先声明谁在前"排出来的。那个
+   * 顺序由编译器决定, 换个优化级别就可能翻个个儿 —— -O2 下 GCC 就把 osc_ctrl
+   * 排到了最前面, 于是 OSC_CH_Init 里的地址自检直接 Error_Handler。改成写死
+   * 绝对地址之后, 优化级别再变也影响不到这里。
+   *
+   * 尺寸对不上会在链接期报错 (osc_ch1_buf 必须是 16 KB、osc_ch2_buf 8 KB、
+   * osc_ctrl 96 B, 首尾正好接上), 不会悄悄错位。 */
+  .osc_ch1_buf 0x30030000 (NOLOAD) : { KEEP(*(.osc_ch1_buf)) } >RAM_D2
+  .osc_ch2_buf 0x30034000 (NOLOAD) : { KEEP(*(.osc_ch2_buf)) } >RAM_D2
+  .osc_ctrl    0x30036000 (NOLOAD) : { KEEP(*(.osc_ctrl))    } >RAM_D2
 
   /* Remove information from the standard libraries */
   /DISCARD/ :
