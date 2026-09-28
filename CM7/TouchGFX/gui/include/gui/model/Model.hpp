@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <oscillograph_trace.h>
+#include <logic_trace.h>
 
 class ModelListener;
 
@@ -49,6 +50,42 @@ public:
         return traceY[ch & 1];
     }
 
+    /* ---- 逻辑分析仪 ---- */
+
+    /**
+     * 逻辑屏上的开关拨到 ON。里面会把示波器两路停掉 (互斥, 见 logic_trace.c)。
+     */
+    void startLogicCapture();
+
+    /** 逻辑屏上的开关拨到 OFF。已经采到的记录不动。 */
+    void stopLogicCapture();
+
+    /**
+     * 丢掉这一次采集的结果, 回到"还没采过"的状态。
+     *
+     * Logic_Data 界面上的 Cancel 走这条路。清完之后屏幕该是空的, 下一次
+     * startLogicCapture() 是从零开始的一轮 —— 和开机后第一次一样。
+     *
+     * Save (存 TF 卡) 以后要在这个界面里做, 那时候它读的是清理**之前**的数据,
+     * 所以不能让 Model 自己在这条路径上清 —— 谁来调由界面决定。
+     */
+    void clearLogicData();
+
+    /** 逻辑采集是否在跑。View 用它决定进界面时把开关摆到哪一面。 */
+    bool isLogicRunning() const;
+
+    /**
+     * 取上一屏逻辑波形。两个出参都指到 Model 内部的缓冲上, 不用释放。
+     * 返回列数 —— 0 表示还没采过 (或者采集完但一条记录都没有), 那就没什么
+     * 可画的。
+     */
+    uint32_t getLogicCols(const uint16_t** level, const uint16_t** change) const
+    {
+        *level  = logicLevel;
+        *change = logicChange;
+        return logicNcols;
+    }
+
 protected:
     ModelListener* modelListener;
 
@@ -58,6 +95,14 @@ protected:
 
     /* 重画节流: 数到 OSC_TRACE_REFRESH_TICKS 才抽一次点 */
     uint8_t tickDiv;
+
+    /* 上一屏逻辑波形。和 traceY 一样放这儿不占栈 —— 两片各 520 × 2 字节 =
+     * 2080 字节。Model 活得和程序一样久 (它住在 FrontendHeap 的静态实例里),
+     * 所以留着它, 从别的界面切回逻辑屏时能照原样把上一屏画出来, 而不是等
+     * 下一次采集。 */
+    uint16_t logicLevel[LOG_TRACE_COLS];
+    uint16_t logicChange[LOG_TRACE_COLS];
+    uint32_t logicNcols;
 };
 
 #endif // MODEL_HPP

@@ -38,6 +38,26 @@ public:
         (void)fresh2;
     }
 
+    /**
+     * 逻辑分析仪的一屏波形算好了, 该重画了。
+     *
+     * 两个缓冲就是 Model 里那两片列数组本身, 不用再拷一份 —— 重画是同步做完
+     * 的, 期间 Model 不会去改它们。
+     *
+     * level[c]  第 c 列末尾的电平, change[c] 第 c 列内发生跳变的通道掩码,
+     * 位映射同 LOG_CH_BIT。两者都是 uint16_t —— 最高那位是 bit 13, 8 位装不下。
+     *
+     * 这个回调是**一次性**的: Model 只在真的算出新一屏的那一帧发它 (GetCols
+     * 是取走式的), 不是每个 tick 都发。所以 View 收到就整块重画, 不用去想节流。
+     */
+    virtual void logicUpdated(const uint16_t* level, const uint16_t* change,
+                              uint32_t ncols)
+    {
+        (void)level;
+        (void)change;
+        (void)ncols;
+    }
+
 protected:
     Model* model;
 };

@@ -21,11 +21,11 @@ OscillographViewBase::OscillographViewBase() :
     add(box1);
 
     button1.setXY(0, 0);
-    button1.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_MEDIUM_ROUNDED_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_MEDIUM_ROUNDED_PRESSED_ID));
+    button1.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_PRESSED_ID));
     button1.setAction(buttonCallback);
     add(button1);
 
-    textArea1.setXY(96, 13);
+    textArea1.setXY(63, 13);
     textArea1.setColor(touchgfx::Color::getColorFromRGB(250, 247, 247));
     textArea1.setLinespacing(0);
     textArea1.setTypedText(touchgfx::TypedText(T___SINGLEUSE_O369));
@@ -112,7 +112,7 @@ OscillographViewBase::OscillographViewBase() :
     boxWithBorder2.setBorderSize(3);
     add(boxWithBorder2);
 
-    textArea4.setXY(684, 70);
+    textArea4.setXY(688, 70);
     textArea4.setColor(touchgfx::Color::getColorFromRGB(24, 200, 219));
     textArea4.setLinespacing(0);
     textArea4.setTypedText(touchgfx::TypedText(T___SINGLEUSE_MEB3));
@@ -123,6 +123,14 @@ OscillographViewBase::OscillographViewBase() :
     textArea5.setLinespacing(0);
     textArea5.setTypedText(touchgfx::TypedText(T___SINGLEUSE_TKBN));
     add(textArea5);
+
+    setting.setXY(345, 0);
+    setting.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_PRESSED_ID));
+    setting.setLabelText(touchgfx::TypedText(T___SINGLEUSE_I0V3));
+    setting.setLabelColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    setting.setLabelColorPressed(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    setting.setAction(buttonCallback);
+    add(setting);
 }
 
 OscillographViewBase::~OscillographViewBase()
@@ -143,5 +151,12 @@ void OscillographViewBase::buttonCallbackHandler(const touchgfx::AbstractButton&
         //When button1 clicked change screen to start_screen
         //Go to start_screen with no screen transition
         application().gotostart_screenScreenNoTransition();
+    }
+    if (&src == &setting)
+    {
+        //Interaction2
+        //When setting clicked change screen to OSC_Setting
+        //Go to OSC_Setting with screen transition towards East
+        application().gotoOSC_SettingScreenSlideTransitionEast();
     }
 }

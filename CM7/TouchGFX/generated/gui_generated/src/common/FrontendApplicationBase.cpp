@@ -14,6 +14,10 @@
 #include <gui/oscillograph_screen/OscillographPresenter.hpp>
 #include <gui/logic_screen/LogicView.hpp>
 #include <gui/logic_screen/LogicPresenter.hpp>
+#include <gui/logic_data_screen/Logic_DataView.hpp>
+#include <gui/logic_data_screen/Logic_DataPresenter.hpp>
+#include <gui/osc_setting_screen/OSC_SettingView.hpp>
+#include <gui/osc_setting_screen/OSC_SettingPresenter.hpp>
 
 using namespace touchgfx;
 
@@ -79,4 +83,30 @@ void FrontendApplicationBase::gotoLogicScreenSlideTransitionEast()
 void FrontendApplicationBase::gotoLogicScreenSlideTransitionEastImpl()
 {
     touchgfx::makeTransition<LogicView, LogicPresenter, touchgfx::SlideTransition<EAST>, Model >(&currentScreen, &currentPresenter, frontendHeap, &currentTransition, &model);
+}
+
+// Logic_Data
+
+void FrontendApplicationBase::gotoLogic_DataScreenSlideTransitionEast()
+{
+    transitionCallback = touchgfx::Callback<FrontendApplicationBase>(this, &FrontendApplicationBase::gotoLogic_DataScreenSlideTransitionEastImpl);
+    pendingScreenTransitionCallback = &transitionCallback;
+}
+
+void FrontendApplicationBase::gotoLogic_DataScreenSlideTransitionEastImpl()
+{
+    touchgfx::makeTransition<Logic_DataView, Logic_DataPresenter, touchgfx::SlideTransition<EAST>, Model >(&currentScreen, &currentPresenter, frontendHeap, &currentTransition, &model);
+}
+
+// OSC_Setting
+
+void FrontendApplicationBase::gotoOSC_SettingScreenSlideTransitionEast()
+{
+    transitionCallback = touchgfx::Callback<FrontendApplicationBase>(this, &FrontendApplicationBase::gotoOSC_SettingScreenSlideTransitionEastImpl);
+    pendingScreenTransitionCallback = &transitionCallback;
+}
+
+void FrontendApplicationBase::gotoOSC_SettingScreenSlideTransitionEastImpl()
+{
+    touchgfx::makeTransition<OSC_SettingView, OSC_SettingPresenter, touchgfx::SlideTransition<EAST>, Model >(&currentScreen, &currentPresenter, frontendHeap, &currentTransition, &model);
 }

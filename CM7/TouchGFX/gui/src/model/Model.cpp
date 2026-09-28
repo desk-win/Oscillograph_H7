@@ -26,7 +26,7 @@
  * 探针本身不在这里实现, 这里只负责在正确的时刻取值。
  * ========================================================================= */
 
-Model::Model() : modelListener(0), tickDiv(0)
+Model::Model() : modelListener(0), tickDiv(0), logicNcols(0)
 {
     OSC_Probe_Init();
 
@@ -36,6 +36,58 @@ Model::Model() : modelListener(0), tickDiv(0)
         {
             traceY[ch][i] = 0;
         }
+    }
+
+    for (uint32_t i = 0; i < LOG_TRACE_COLS; i++)
+    {
+        logicLevel[i]  = 0;
+        logicChange[i] = 0;
+    }
+}
+
+void Model::startLogicCapture()
+{
+    /* 里面会先把示波器两路停掉 (互斥), 见 logic_trace.c。 */
+    LOG_Trace_Start();
+}
+
+void Model::stopLogicCapture()
+{
+    LOG_Trace_Stop();
+
+    /* 注意这里没有清屏, 也没有丢掉 logicLevel/logicChange —— 那是**结果**,
+     * 用户要能一直看着它。View 那边拨开关时也不擦 (见 LogicView.cpp)。 */
+}
+
+bool Model::isLogicRunning() const
+{
+    return LOG_Trace_IsRunning() != 0;
+}
+
+void Model::clearLogicData()
+{
+    /* 采集中的话这里面先停 (等于替用户拨了一次开关), 然后记录 / 结果全清。 */
+    LOG_Trace_Clear();
+
+    /* Model 自己这两片也要清 —— 它们才是 View 直接读的那一份。不清的话,
+     * 从 Logic_Data 切回 Logic 时 setupScreen 拿到的 ncols 还是旧的, 屏幕上
+     * 会原样画回来一遍。 */
+    for (uint32_t i = 0u; i < LOG_TRACE_COLS; i++)
+    {
+        logicLevel[i]  = 0;
+        logicChange[i] = 0;
+    }
+    logicNcols = 0u;
+
+    /* 通知一声, ncols = 0 就是"没东西可画了"。
+     *
+     * 收到的是哪个 Presenter 取决于现在停在哪一屏 —— Cancel 是在 Logic_Data
+     * 上按的, 所以 modelListener 是那一屏的 Presenter, 它的 logicUpdated 是
+     * 默认实现 (什么都不做)。也就是说 **Logic 那个控件不会因为这一句被擦掉** ——
+     * 它靠的是 LogicView::setupScreen() 里按 ncols == 0 自己清一次。 */
+    if (modelListener != 0)
+    {
+        modelListener->logicUpdated(logicLevel, logicChange, 0u);
     }
 }
 
@@ -84,9 +136,50 @@ void Model::tick()
     }
     lastEntry = now;
 
+    /* 逻辑分析仪: 采半帧、找跳变、写记录全在 HSEM 中断里做完了 (和示波器同一种
+     * 驱动方式, 见 logic_trace.c 的 LOG_Trace_OnHalfFrame); 这里只干没期限的那
+     * 一半 —— 记录满 / 空闲超时之后把记录抽成一屏列数据交给控件, 外加摆 LED。
+     *
+     * 必须放在下面那个"两路都停了就提前返回"的守卫**之前**: 采集是在中断里停
+     * 的, 停完那一屏的归约得靠这里做, 而那一刻恰恰常常是示波器两路都停着的情
+     * 况 —— 放在守卫后面的话, 那一帧算好的列就永远发不出去, 屏幕上一直是空的。
+     *
+     * 代价是空闲时多一次读 + 一次比较, 可以忽略。 */
+    LOG_Trace_Poll();
+
+    {
+        const uint16_t* lvl = 0;
+        const uint16_t* chg = 0;
+        uint32_t        n   = 0;
+
+        /* GetCols 是取走式的: 只在真的算出新一屏的那一拍返回 1, 所以这里不是
+         * 每个 tick 都重画 —— 光有这一处节流就够了, 不用再数 tick。 */
+        if (LOG_Trace_GetCols(&lvl, &chg, &n) != 0u)
+        {
+            for (uint32_t c = 0u; c < n; c++)
+            {
+                logicLevel[c]  = lvl[c];
+                logicChange[c] = chg[c];
+            }
+            logicNcols = n;
+
+            /* 送给 View。没有 fresh 标志那一套 —— 这里的语义就是"算出新的了",
+             * 不用区分哪几路。 */
+            if (modelListener != 0)
+            {
+                modelListener->logicUpdated(logicLevel, logicChange, logicNcols);
+            }
+        }
+    }
+
     /* 两个通道都停了才没什么可做。只要还有一路在跑, 下面就得照常走 ——
-     * 停掉的那一路在 OSC_Trace_Poll / OSC_Trace_Build 里各自被跳过。 */
-    if (!OSC_Trace_IsRunning(OSC_TRACE_CH1) && !OSC_Trace_IsRunning(OSC_TRACE_CH2))
+     * 停掉的那一路在 OSC_Trace_Poll / OSC_Trace_Build 里各自被跳过。
+     *
+     * 逻辑采集也算"有一路在跑": 它在跑的时候, 上面的 LOG_Trace_Poll 每个 tick
+     * 都要被调到 —— 启动门 (等 CM4 起来、等不到就超时弹回开关) 和 LED 都在那儿,
+     * 少调几次就少几次兜底。 */
+    if (!OSC_Trace_IsRunning(OSC_TRACE_CH1) && !OSC_Trace_IsRunning(OSC_TRACE_CH2) &&
+        !LOG_Trace_IsRunning())
     {
         return;
     }

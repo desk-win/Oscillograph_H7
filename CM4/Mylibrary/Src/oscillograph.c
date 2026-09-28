@@ -104,11 +104,40 @@ void OSC_CH_Init(void){
     osc_ctrl.magic = OSC_SHARED_MAGIC;
     __DMB();
 
+    OSC_CH_StartAdc();
+}
+
+/* ===========================================================================
+ * ADC 硬件的启停 —— 逻辑分析仪的互斥
+ *
+ * 这两件事抢的是同一片 D2 带宽, 而 ADC 从 OSC_CH_Init() 起就是一直开着的
+ * (设计如此: 主循环只"不看它", 硬件照常采), 所以逻辑采集期间必须真的把硬件
+ * 停下来, 不然白占带宽。
+ *
+ * 用 MultiMode 那一对而不是 HAL_ADC_Stop_DMA(&hadc1): ADC1/ADC2 是多重模式
+ * 配对的, 只停主的那一半, 从属 (ADC2) 会继续采、继续发 DMA 请求。
+ * ========================================================================= */
+static uint8_t s_adc_running;
+
+void OSC_CH_StopAdc(void)
+{
+    if (!s_adc_running) return;
+
+    HAL_ADCEx_MultiModeStop_DMA(&hadc1);   /* 主 + 从一起停 */
+    HAL_ADC_Stop_DMA(&hadc3);
+    s_adc_running = 0u;
+}
+
+void OSC_CH_StartAdc(void)
+{
+    if (s_adc_running) return;
+
     HAL_ADCEx_MultiModeStart_DMA(&hadc1, osc_ch1_buf, OSC_CH1_BUF_WORDS);
     HAL_ADC_Start_DMA(&hadc3, (uint32_t *)osc_ch2_buf, OSC_CH2_BUF_WORDS);
 
     __HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_OVR);
     __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
+    s_adc_running = 1u;
 }
 
 
@@ -467,6 +496,20 @@ static void osc_scan_half(uint32_t ch, uint32_t done, uint32_t lag)
 */
 void OSC_CH_Poll(void)
 {
+    /* ---- 逻辑分析仪把 ADC 抢走之后, 示波器要重新开始时在这里补启 ----
+     *
+     * 两个屏幕各自有个开关, 切屏不改变对方的状态, 所以 CM4 这边强制互斥
+     * (docs/log_plan.md §7.6): 逻辑采集把 ADC 停了 (见 LOG_Poll), 示波器重新
+     * 被打开 (CM7 置了 cfg_run_chN) 时在这里把它补回来。
+     *
+     * 条件里带 cfg_run == 0 是必须的, 不只是"顺手": 没有它的话, 逻辑采集刚
+     * 起来的那一拍就会在同一轮主循环里被这一句把 ADC 又打开 —— 互斥形同
+     * 虚设。带上它就与两个 Poll 的调用顺序无关了。 */
+    if (!s_adc_running && LOG_CTRL->cfg_run == 0u &&
+        (osc_ctrl.cfg_run_ch1 || osc_ctrl.cfg_run_ch2)) {
+        OSC_CH_StartAdc();
+    }
+
     /* 两个通道各有各的闸。停掉的那一路什么都不做 —— 不扫描、不发布、不通知
      * CM7, 于是它的 seq 不涨、SDRAM 环里也不再进新数据。屏幕上那一路怎么
      * 处理是另一回事 (由 View 直接擦掉, 不等这里)。

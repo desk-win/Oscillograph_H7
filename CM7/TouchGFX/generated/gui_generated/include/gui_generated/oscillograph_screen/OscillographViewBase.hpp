@@ -14,6 +14,7 @@
 #include <touchgfx/widgets/canvas/PainterRGB565.hpp>
 #include <touchgfx/widgets/ToggleButton.hpp>
 #include <touchgfx/widgets/BoxWithBorder.hpp>
+#include <touchgfx/widgets/ButtonWithLabel.hpp>
 
 class OscillographViewBase : public touchgfx::View<OscillographPresenter>
 {
@@ -53,6 +54,7 @@ protected:
     touchgfx::BoxWithBorder boxWithBorder2;
     touchgfx::TextArea textArea4;
     touchgfx::TextArea textArea5;
+    touchgfx::ButtonWithLabel setting;
 
 private:
 

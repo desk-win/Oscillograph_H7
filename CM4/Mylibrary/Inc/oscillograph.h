@@ -23,9 +23,18 @@ void OSC_CH_Init(void);
  * 必须在半个帧周期 655 µs 内被调到, 主循环里不要放阻塞调用。 */
 void OSC_CH_Poll(void);
 
-
-
-
+/* ---- ADC 硬件的启停 (给逻辑分析仪让路用) ----
+ *
+ * 逻辑分析仪的采集和示波器的采集抢同一片 D2 带宽, 所以 CM4 这边强制互斥:
+ * 逻辑采集起来的时候把 ADC 停掉, 示波器重新被打开的时候再补启。
+ *
+ * 为什么不能只靠"清掉 cfg_run_chN 让 CM4 不再扫描": 那样 ADC 和 DMA1 还在
+ * 满速跑, 白白占着 D2 的带宽 —— 而带宽正是这两件事唯一的冲突点。
+ *
+ * 两个函数都自己记着当前状态, 重复调用是空操作。控制流的两个方向分别在
+ * LOG_Poll() (停) 和 OSC_CH_Poll() (补启) 里, 见 docs/log_plan.md §7.6。 */
+void OSC_CH_StopAdc(void);
+void OSC_CH_StartAdc(void);
 
 
 void OSC_CH_DiagPrint(void);

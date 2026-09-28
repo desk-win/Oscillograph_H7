@@ -37,6 +37,7 @@
 #include "touch.h"
 #include "stm32h7xx_hal_gpio.h"
 #include "oscillograph.h"
+#include "logic_trace.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -181,6 +182,10 @@ Error_Handler();
   /* 注册 MDMA 回调 + 打开 CM4 发布事件的中断入口 —— 必须在 MX_MDMA_Init()
    * 之后、而且要在 osKernelStart() 之前, 不然第一发搬运可能赶在回调注册前面。 */
   M7_OSC_Init();
+
+  /* 逻辑分析仪的显示侧。放在 osKernelStart() 之前: 它只填自己那几个静态变量、
+   * 把共享控制块里归 CM7 写的那几个字段归零, 不碰 DMA、不用等调度器。 */
+  LOG_Trace_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */

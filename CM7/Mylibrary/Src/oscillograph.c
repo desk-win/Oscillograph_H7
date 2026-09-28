@@ -6,6 +6,7 @@
  * ========================================================================= */
 
 #include "oscillograph.h"
+#include "logic_trace.h" /* LOG_Trace_OnHalfFrame —— 2 号信号量那一路的落点 */
 #include "mdma.h"
 #include "osc_probe.h"   /* OSC_ISR_Enter / Exit —— 只用于中断计时, 调试完一起删 */
 #include <stdint.h>
@@ -80,7 +81,10 @@ void M7_OSC_Init(void)
      * 这一句就是让那个释放变成 CM7 的 HSEM1_IRQn。
      *
      * 只开 1 号: 0 号上还压着 CM7 自己在 boot 时 Release 的那一下
-     * (main.c Boot_Mode_Sequence_2), 开进来也没用。 */
+     * (main.c Boot_Mode_Sequence_2), 开进来也没用。
+     *
+     * 2 号 (逻辑分析仪) 不在这里开 —— 它归 LOG_Trace_Init(), 那个函数在这之后
+     * 才被调。两路各管各的武装, 谁改谁负责重新武装。 */
     HAL_HSEM_ActivateNotification(OSC_HSEM_MASK);
 }
 
@@ -93,21 +97,37 @@ void HSEM1_IRQHandler(void)
     OSC_ISR_Exit();
 }
 
-/* HAL 在 IRQHandler 里已经把触发的那一位从 C1IER 清掉了
- * (stm32h7xx_hal_hsem.c:386), 不在这里重新武装的话, 只会进这一次中断。 */
+/* 信号量释放的中断回调。**两路通知都从这里进** —— HSEM 是每核一条中断线, 不是
+ * 每个信号量一条: 1 号 (示波器) 和 2 号 (逻辑分析仪) 共用 CM7 的 HSEM1_IRQn。
+ *
+ * HAL 传进来的是整个 C1MISR (stm32h7xx_hal_hsem.c 里先读 statusreg, 拿着它清
+ * 使能位和标志, 再拿同一个值调这里), 所以**一次可能带着两个位**。写成
+ * "不是 A 就 return" 的话, 那位被一起带进来的 B 就永远武装不回去了 —— 表现是
+ * 该路只工作一次然后彻底没反应。
+ *
+ * 两路各自独立处理、各自重新武装。 */
 void HAL_HSEM_FreeCallback(uint32_t SemMask)
 {
-    if ((SemMask & OSC_HSEM_MASK) == 0u) return;   /* 不是我们的信号量 */
+    if ((SemMask & OSC_HSEM_MASK) != 0u) {
+        /* 先武装再搬运: 反过来的话, 搬运那几微秒里来的发布会被漏掉, 那个半帧
+         * 就成了环上的空洞。 */
+        HAL_HSEM_ActivateNotification(OSC_HSEM_MASK);
 
-    /* 先武装再搬运: 反过来的话, 搬运那几微秒里来的发布会被漏掉, 那个半帧
-     * 就成了环上的空洞。 */
-    HAL_HSEM_ActivateNotification(OSC_HSEM_MASK);
+        m7_diag_irq++;
+        M7_OSC_Poll();
 
-    m7_diag_irq++;
-    M7_OSC_Poll();
+        /* M7_OSC_Poll 只碰静态变量和 MDMA 寄存器, 不调任何 RTOS 接口 —— 所以
+         * 这个中断不占 FreeRTOS 的临界区, 也不需要 portYIELD_FROM_ISR。 */
+    }
 
-    /* M7_OSC_Poll 只碰静态变量和 MDMA 寄存器, 不调任何 RTOS 接口 —— 所以
-     * 这个中断不占 FreeRTOS 的临界区, 也不需要 portYIELD_FROM_ISR。 */
+    if ((SemMask & LOG_HSEM_MASK) != 0u) {
+        /* 同上: 先武装, 否则逻辑采集只会工作一次。
+         *
+         * 顺序上和示波器那一段无关 —— 两个半帧的消费互不依赖, 谁先谁后都行。 */
+        HAL_HSEM_ActivateNotification(LOG_HSEM_MASK);
+
+        LOG_Trace_OnHalfFrame();
+    }
 }
 
 /* ===========================================================================

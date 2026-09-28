@@ -15,6 +15,7 @@
  * ========================================================================= */
 
 #include "oscillograph_trace.h"
+#include "logic_trace.h"        /* 互斥: LOG_Trace_Stop */
 #include "oscillograph.h"
 #include "sharedconfig.h"
 
@@ -89,6 +90,17 @@ static uint32_t seq_of(uint32_t ch)
 void OSC_Trace_Start(osc_trace_ch_t ch)
 {
     const uint32_t c = (uint32_t)ch;
+
+    /* ---- 互斥: 逻辑分析仪让路 (docs/log_plan.md §7.6) ----
+     *
+     * 两个屏幕各自有个开关, 切屏不改变对方的状态, 所以"用户不会同时开"不是
+     * 个能依赖的假设。两个一起跑的后果不是坏一点而已: 逻辑采集把 TIM2 + DMA2
+     * 占住, 而示波器的迟滞扫描要吃掉 CM4 主循环的一大块, CM4 那边会开始成片
+     * 地追丢半帧 —— 逻辑波形上表现为每一条记录都带 GAP。
+     *
+     * 放在最前面 (在动 s_trig / s_running 之前): LOG_Trace_Stop 只清一个共享
+     * 标志, 不碰这一路的状态。 */
+    LOG_Trace_Stop();
 
     s_trig[c].cand_held = 0u;
     s_trig[c].locked    = 0u;

@@ -29,12 +29,12 @@ LogicViewBase::LogicViewBase() :
     line2_1.setLineEndingStyle(touchgfx::Line::SQUARE_CAP_ENDING);
     add(line2_1);
 
-    button1.setXY(623, 0);
+    button1.setXY(625, 156);
     button1.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_NORMAL_ID));
     button1.setAction(buttonCallback);
     add(button1);
 
-    textArea1.setXY(686, 13);
+    textArea1.setXY(688, 169);
     textArea1.setColor(touchgfx::Color::getColorFromRGB(247, 240, 240));
     textArea1.setLinespacing(0);
     textArea1.setTypedText(touchgfx::TypedText(T___SINGLEUSE_0ZQO));
@@ -159,6 +159,18 @@ LogicViewBase::LogicViewBase() :
     line8.setLineWidth(3);
     line8.setLineEndingStyle(touchgfx::Line::SQUARE_CAP_ENDING);
     add(line8);
+
+    Setting.setXY(625, 74);
+    Setting.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_PRESSED_ID));
+    Setting.setLabelText(touchgfx::TypedText(T___SINGLEUSE_R7ZP));
+    Setting.setLabelColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    Setting.setLabelColorPressed(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    Setting.setAction(buttonCallback);
+    add(Setting);
+
+    toggleButton1.setXY(657, 0);
+    toggleButton1.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_MEDIUM_ROUNDED_TEXT_OFF_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_MEDIUM_ROUNDED_TEXT_ON_LIGHT_ID));
+    add(toggleButton1);
 }
 
 LogicViewBase::~LogicViewBase()
@@ -179,5 +191,12 @@ void LogicViewBase::buttonCallbackHandler(const touchgfx::AbstractButton& src)
         //When button1 clicked change screen to start_screen
         //Go to start_screen with screen transition towards East
         application().gotostart_screenScreenSlideTransitionEast();
+    }
+    if (&src == &Setting)
+    {
+        //Interaction2
+        //When Setting clicked change screen to Logic_Data
+        //Go to Logic_Data with screen transition towards East
+        application().gotoLogic_DataScreenSlideTransitionEast();
     }
 }

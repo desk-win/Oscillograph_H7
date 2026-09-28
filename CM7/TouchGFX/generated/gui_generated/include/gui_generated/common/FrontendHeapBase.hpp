@@ -20,6 +20,10 @@
 #include <gui/oscillograph_screen/OscillographPresenter.hpp>
 #include <gui/logic_screen/LogicView.hpp>
 #include <gui/logic_screen/LogicPresenter.hpp>
+#include <gui/logic_data_screen/Logic_DataView.hpp>
+#include <gui/logic_data_screen/Logic_DataPresenter.hpp>
+#include <gui/osc_setting_screen/OSC_SettingView.hpp>
+#include <gui/osc_setting_screen/OSC_SettingPresenter.hpp>
 
 
 /**
@@ -45,7 +49,9 @@ public:
     typedef touchgfx::meta::TypeList< start_screenView,
             touchgfx::meta::TypeList< OscillographView,
             touchgfx::meta::TypeList< LogicView,
-            touchgfx::meta::Nil > >
+            touchgfx::meta::TypeList< Logic_DataView,
+            touchgfx::meta::TypeList< OSC_SettingView,
+            touchgfx::meta::Nil > > > >
             > GeneratedViewTypes;
 
     /**
@@ -60,7 +66,9 @@ public:
     typedef touchgfx::meta::TypeList< start_screenPresenter,
             touchgfx::meta::TypeList< OscillographPresenter,
             touchgfx::meta::TypeList< LogicPresenter,
-            touchgfx::meta::Nil > >
+            touchgfx::meta::TypeList< Logic_DataPresenter,
+            touchgfx::meta::TypeList< OSC_SettingPresenter,
+            touchgfx::meta::Nil > > > >
             > GeneratedPresenterTypes;
 
     /**

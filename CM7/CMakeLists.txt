@@ -50,6 +50,37 @@ add_executable(${CMAKE_PROJECT_NAME})
 # Include mx-generated
 include("mx-generated.cmake")
 
+# ---- CMSIS-DSP ----
+# ../Drivers/CMSIS/DSP 是 CMSIS-DSP 的**源码**(不是预编译的 libarm_*.a), 由它
+# 自带的 Source/CMakeLists.txt 编成一个 CMSISDSP 静态库。几个必须照顾到的点:
+#
+#  * CMSISCORE 一定要给。DSP 的 CMakeLists 只把 ${CMSISCORE}/Include 加进它自己的
+#    include 路径, 并不继承我们这边的 MX_Include_Dirs, 不给它就在 core_cm7.h 上
+#    直接编挂。CubeMX 的布局是 Drivers/CMSIS/Include, 所以指到 Drivers/CMSIS。
+#  * 二进制目录必须显式指定到 build 目录下, 否则 CMake 会想拿源码目录当 build 目录。
+#  * DISABLEFLOAT16: Cortex-M7 的 -mfpu=fpv5-d16 不支持 fp16 存储格式, GCC 因此
+#    不定义 __ARM_FP16_FORMAT_IEEE, arm_math_types_f16.h 里那套 float16 内核就整体
+#    退化成"不存在" —— 实测 ~200 个 *_f16.c 编出来都是 0 字节的空目标文件。关掉它
+#    只是省掉这 200 次空编译, 不影响任何真正可用的 API。
+#  * 不设 FASTBUILD: 走单文件编译。配合工具链本来就带上的 -ffunction-sections 和
+#    -Wl,--gc-sections, 没被调用的 DSP 函数会被链接器整个丢掉, 固件不会白白变大。
+set(CMSISCORE      ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS)
+set(CMSIS_DSP_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../Drivers/CMSIS/DSP)
+set(CMSIS_DSP_INC  ${CMSIS_DSP_ROOT}/Include)
+set(DISABLEFLOAT16 ON)
+
+add_subdirectory(${CMSIS_DSP_ROOT}/Source ${CMAKE_CURRENT_BINARY_DIR}/cmsis-dsp)
+
+# DSP 是纯计算, 全部价值都在速度上, 而 Debug 默认的 -Og 对这种循环密集的库掉得
+# 很厉害。单独把这一个库钉在 -O2: 它排在 CMAKE_C_FLAGS_DEBUG / _RELEASE 后面,
+# 所以 Debug 和 Release 两种构建下都是 -O2 (Debug 仍保留 -g3 供单步)。
+target_compile_options(CMSISDSP PRIVATE -O2)
+
+# 注意这里不能用带 PRIVATE/PUBLIC 关键字的写法: mx-generated.cmake 里对同一个
+# 目标用的是 plain 签名 (target_link_libraries(<target> ${MX_LINK_LIBS})), CMake
+# 不允许两种签名混用。mx-generated.cmake 是自动生成的, 改不了, 所以这边跟它一致。
+target_link_libraries(${CMAKE_PROJECT_NAME} CMSISDSP)
+
 # Add touchgfx generated sources and libraries
 add_subdirectory(cmake/touchgfx)
 
@@ -57,9 +88,12 @@ add_subdirectory(cmake/touchgfx)
 # 它只从 stm32cubemx 这个 INTERFACE 库继承 include 路径, 所以看不到上面加给
 # 可执行文件的 Mylibrary/Inc。这里补一条, 好让 Model/View 那边能 include 到
 # 自己库的头。cmake/touchgfx/CMakeLists.txt 是 Designer 生成的, 不能改。
+# CMSIS_DSP_INC 走同一条线传下去 —— 这样 Model/View 里也能直接 include
+# "arm_math.h" 调 DSP (链的是下面那条 target_link_libraries 里的 CMSISDSP)。
 target_include_directories(stm32cubemx INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Inc
     ${CMAKE_CURRENT_SOURCE_DIR}/../Common/Inc
+    ${CMSIS_DSP_INC}
 )
 
 
@@ -90,6 +124,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/osc_probe.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/oscillograph.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/oscillograph_trace.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/logic_trace.c
 )
 
 # Link directories setup

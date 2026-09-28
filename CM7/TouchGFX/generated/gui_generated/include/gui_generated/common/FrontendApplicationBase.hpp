@@ -31,6 +31,12 @@ public:
     // Logic
     void gotoLogicScreenSlideTransitionEast();
 
+    // Logic_Data
+    void gotoLogic_DataScreenSlideTransitionEast();
+
+    // OSC_Setting
+    void gotoOSC_SettingScreenSlideTransitionEast();
+
 protected:
     touchgfx::Callback<FrontendApplicationBase> transitionCallback;
     FrontendHeap& frontendHeap;
@@ -46,6 +52,12 @@ protected:
 
     // Logic
     void gotoLogicScreenSlideTransitionEastImpl();
+
+    // Logic_Data
+    void gotoLogic_DataScreenSlideTransitionEastImpl();
+
+    // OSC_Setting
+    void gotoOSC_SettingScreenSlideTransitionEastImpl();
 };
 
 #endif // FRONTENDAPPLICATIONBASE_HPP

@@ -93,8 +93,6 @@ void Error_Handler(void);
 #define B_S2_GPIO_Port GPIOA
 #define OSC_AC2_Pin GPIO_PIN_5
 #define OSC_AC2_GPIO_Port GPIOA
-#define EC_SW_Pin GPIO_PIN_4
-#define EC_SW_GPIO_Port GPIOC
 #define M4_LED_Pin GPIO_PIN_1
 #define M4_LED_GPIO_Port GPIOB
 

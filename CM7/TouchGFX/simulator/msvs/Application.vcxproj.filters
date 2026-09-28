@@ -208,6 +208,30 @@
     <Filter Include="Source Files\generated\gui_generated\logic_screen">
       <UniqueIdentifier>0E6AABD0-7660-0B1C-FB43-39147178C3DF</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\gui\osc_setting_screen">
+      <UniqueIdentifier>4FA40C08-6671-87DB-4603-1C78C082978A</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\gui\osc_setting_screen">
+      <UniqueIdentifier>6F1270DD-40BF-A9D1-EA43-D05D676DE972</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\generated\gui_generated\osc_setting_screen">
+      <UniqueIdentifier>1228D0D6-8F76-742C-892F-1BB0A75EB0B6</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\generated\gui_generated\osc_setting_screen">
+      <UniqueIdentifier>C28932C1-B083-4FD4-806B-6E0A0B60359C</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\gui\logic_data_screen">
+      <UniqueIdentifier>1400AA41-55EE-5D67-5623-E26C62B13F11</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\gui\logic_data_screen">
+      <UniqueIdentifier>23603F3F-2CBD-D508-6F3E-9A75BC0E7CD6</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\generated\gui_generated\logic_data_screen">
+      <UniqueIdentifier>6BE120E4-94D7-7ED3-101F-0E20CB2C2271</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\generated\gui_generated\logic_data_screen">
+      <UniqueIdentifier>F29514C3-F04A-1480-94EE-21EFA04F16E9</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(TouchGFXReleasePath)\framework\source\platform\driver\touch\SDL2TouchController.cpp">
@@ -266,6 +290,24 @@
     </ClCompile>
     <ClCompile Include="..\..\generated\gui_generated\src\logic_screen\LogicViewBase.cpp">
       <Filter>Source Files\generated\gui_generated\logic_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\gui\src\osc_setting_screen\OSC_SettingPresenter.cpp">
+      <Filter>Source Files\gui\osc_setting_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\gui\src\osc_setting_screen\OSC_SettingView.cpp">
+      <Filter>Source Files\gui\osc_setting_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\generated\gui_generated\src\osc_setting_screen\OSC_SettingViewBase.cpp">
+      <Filter>Source Files\generated\gui_generated\osc_setting_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\gui\src\logic_data_screen\Logic_DataPresenter.cpp">
+      <Filter>Source Files\gui\logic_data_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\gui\src\logic_data_screen\Logic_DataView.cpp">
+      <Filter>Source Files\gui\logic_data_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\generated\gui_generated\src\logic_data_screen\Logic_DataViewBase.cpp">
+      <Filter>Source Files\generated\gui_generated\logic_data_screen</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -735,6 +777,24 @@
     </ClInclude>
     <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\logic_screen\LogicViewBase.hpp">
       <Filter>Header Files\generated\gui_generated\logic_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\gui\include\gui\osc_setting_screen\OSC_SettingPresenter.hpp">
+      <Filter>Header Files\gui\osc_setting_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\gui\include\gui\osc_setting_screen\OSC_SettingView.hpp">
+      <Filter>Header Files\gui\osc_setting_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\osc_setting_screen\OSC_SettingViewBase.hpp">
+      <Filter>Header Files\generated\gui_generated\osc_setting_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\gui\include\gui\logic_data_screen\Logic_DataPresenter.hpp">
+      <Filter>Header Files\gui\logic_data_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\gui\include\gui\logic_data_screen\Logic_DataView.hpp">
+      <Filter>Header Files\gui\logic_data_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\logic_data_screen\Logic_DataViewBase.hpp">
+      <Filter>Header Files\generated\gui_generated\logic_data_screen</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

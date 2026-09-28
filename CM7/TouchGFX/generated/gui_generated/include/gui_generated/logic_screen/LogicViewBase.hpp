@@ -12,6 +12,8 @@
 #include <touchgfx/widgets/canvas/PainterRGB565.hpp>
 #include <touchgfx/widgets/Button.hpp>
 #include <touchgfx/widgets/TextArea.hpp>
+#include <touchgfx/widgets/ButtonWithLabel.hpp>
+#include <touchgfx/widgets/ToggleButton.hpp>
 
 class LogicViewBase : public touchgfx::View<LogicPresenter>
 {
@@ -58,6 +60,8 @@ protected:
     touchgfx::PainterRGB565 line7Painter;
     touchgfx::Line line8;
     touchgfx::PainterRGB565 line8Painter;
+    touchgfx::ButtonWithLabel Setting;
+    touchgfx::ToggleButton toggleButton1;
 
 private:
 

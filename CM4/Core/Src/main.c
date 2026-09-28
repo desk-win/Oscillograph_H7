@@ -26,8 +26,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "logic.h"
 #include "osc_operate.h"
 #include "oscillograph.h"
+#include "sharedconfig.h"
 #include "usbd_cdc_if.h"
 #include <stdint.h>
 #include <sys/_intsup.h>
@@ -131,6 +133,11 @@ int main(void)
   OSC_Ch1_Multiple(1, 1);
   OSC_Ch2_Multiple(1, 1);
   OSC_CH_Init();
+  /* 逻辑分析仪的采集侧。放在 OSC_CH_Init() 之后: 它要用 DWT (那把计数器在
+   * osc_scan_half 那边的 dwt_init 里才打开), 而且它一上来就把示波器的 ADC
+   * 当成"正在跑"的状态去管。硬件配置 (TIM2 + DMA2_Stream0) 全在 CubeMX 生成
+   * 的 tim.c 里, 这里只填控制块初值 + 把 LOG_EN 拉低。 */
+  LOG_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -145,12 +152,20 @@ int main(void)
      * 丢了半帧会记进 diag_miss, 可以用 OSC_CH_DiagPrint 看到。 */
     OSC_CH_Poll();
 
+    /* 逻辑分析仪的启停 + 半帧记账。它只在 cfg_run 变沿的那一拍干活, 平时
+     * 就是一次读 + 一次比较, 放在 OSC_CH_Poll 后面不影响后者的期限。 */
+    LOG_Poll();
+
     /* 诊断打印每秒一次。usb_printf 是阻塞的, 打印期间必然丢半帧 ——
-     * 调试用可以, 正式跑的时候把这段去掉。 */
-    if ((HAL_GetTick() - s_diag_tick) >= 1000u)
+     * 调试用可以, 正式跑的时候把这段去掉。
+     *
+     * 逻辑采集期间必须关掉 (docs/log_plan.md §7.1): 打印一次要几毫秒, 那期间
+     * CM4 走不到 LOG_Poll、也走不到这里 —— 对示波器只是丢半帧, 对逻辑分析仪
+     * 却是 M7 那边成片地追丢 (frame_seq 一涨涨一串, 每条记录都带上 GAP)。 */
+    if (LOG_CTRL->cfg_run == 0u && (HAL_GetTick() - s_diag_tick) >= 1000u)
     {
       s_diag_tick = HAL_GetTick();
-      OSC_CH_DiagPrint();
+      // OSC_CH_DiagPrint();
     }
   }
   /* USER CODE END 3 */
