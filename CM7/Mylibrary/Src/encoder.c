@@ -1,0 +1,113 @@
+#include "encoder.h"
+#include "stm32h747xx.h"
+#include "stm32h7xx_hal_gpio.h"
+
+/* A 相上升沿 → 动 encoder_count 的唯一入口 */
+static void Encoder_OnAEdge(void);
+
+/* Encoder_Increment 的比较基准。只有主循环会写它, 中断不碰 */
+static int16_t last_count = 0;
+
+/* 上一次被接受的边沿的时刻, 用于消抖。只在中断里读写 */
+static uint32_t last_edge_tick = 0;
+
+volatile int16_t encoder_count = 0;
+
+/* ---------------------------------------------------------------------------
+ * 解码
+ * ------------------------------------------------------------------------- */
+
+static void Encoder_OnAEdge(void)
+{
+
+    /* 消抖: 窗口内的重复边沿直接丢掉。ENCODER_DEBOUNCE_MS 是 0u 的时候, 无符
+     * 号减法的差值恒不小于 0, 这个判断永远不成立, 等于没消抖。 */
+    if ((uint32_t)(HAL_GetTick() - last_edge_tick) < ENCODER_DEBOUNCE_MS)
+    {
+        return;
+    }
+    last_edge_tick = HAL_GetTick();
+
+    static uint8_t time = 0;
+    if (time == 2) {
+        time=0;
+    }
+    time++;
+    /* 在 A 的上升沿上采样 B 的电平定方向 */
+    if (HAL_GPIO_ReadPin(ENCODER_B_PORT, ENCODER_B_PIN) == GPIO_PIN_SET){
+        if (time == 1) {
+            encoder_count ++;
+        }      
+    }else{
+        if (time == 1) {
+            encoder_count --;
+        }
+    }
+    /* 边界: 到顶 / 到底就停在边上, 不回绕 */
+    if (encoder_count > ENCODER_COUNT_MAX){
+        encoder_count = ENCODER_COUNT_MAX;
+    }else if (encoder_count < ENCODER_COUNT_MIN){
+        encoder_count = ENCODER_COUNT_MIN;
+    }
+
+}
+
+/* ---------------------------------------------------------------------------
+ * 中断入口
+ * ------------------------------------------------------------------------- */
+
+/**
+ * EXTI1 的中断回调 (A 相 = PC1)。
+ *
+ * 这个函数是 HAL 里的全局弱符号 (stm32h7xx_hal_gpio.c), 这里给一个强定义把
+ * 它顶掉。链路上游是 CubeMX 生成的:
+ *   stm32h7xx_it.c 的 EXTI1_IRQHandler()
+ *     → HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_1)   // 查标志、清标志
+ *     → 本函数
+ * 所以 CubeMX 那边重新生成多少次都不会动到这里, 不用去改 USER CODE 段。
+ *
+ * 中断里只做: 读一根电平线、加一下、写回去、读一次 tick。没有 FreeRTOS API,
+ * 没有 HAL_Delay / HAL_I2C_xxx 这类会等 tick 的阻塞调用。
+ *
+ * 别的 EXTI 线要是以后启用, 在自己的回调里判 GPIO_Pin 即可 —— 想让编码器这套
+ * 东西全留在本文件里, 就别在别处也定义 HAL_GPIO_EXTI_Callback。
+ */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == ENCODER_A_PIN)
+    {
+        Encoder_OnAEdge();
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * 对外接口
+ * ------------------------------------------------------------------------- */
+
+void Encoder_Init(void)
+{
+    encoder_count  = 0;
+    last_count     = 0;
+    last_edge_tick = HAL_GetTick();
+
+    /* MX_GPIO_Init() 里 CubeMX 给的是 SetPriority(EXTI1_IRQn, 0, 0) —— 0 是最
+     * 高优先级, 比 LTDC/DMA2D 的 5 还高。压到 ENCODER_IRQ_PRIORITY。
+     * 要是以后在 CubeMX 的 NVIC 面板里也改成 10, 这两行可以删。 */
+    HAL_NVIC_SetPriority(EXTI1_IRQn, ENCODER_IRQ_PRIORITY, 0);
+}
+
+int16_t Encoder_GetCount(void)
+{
+    return encoder_count;
+}
+
+int16_t Encoder_Increment(void)
+{
+    /* 先读快照: 16 位读是原子的, 拿到的要么是这次边沿之前的值, 要么是之后的,
+     * 不会撕裂。快照之后的边沿算到下一次调用里。 */
+    int16_t now   = encoder_count;
+    int16_t delta = (int16_t)(now - last_count);
+
+    last_count = now;
+    return delta;
+}

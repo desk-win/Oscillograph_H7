@@ -38,6 +38,7 @@
 #include "stm32h7xx_hal_gpio.h"
 #include "oscillograph.h"
 #include "logic_trace.h"
+#include "encoder.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -186,6 +187,10 @@ Error_Handler();
   /* 逻辑分析仪的显示侧。放在 osKernelStart() 之前: 它只填自己那几个静态变量、
    * 把共享控制块里归 CM7 写的那几个字段归零, 不碰 DMA、不用等调度器。 */
   LOG_Trace_Init();
+
+  /* 旋钮编码器 (PC1/PC2)。GPIO 和 EXTI1 的 NVIC 都是 MX_GPIO_Init() 配的,
+   * 这里只清计数、并把 EXTI1 的抢占优先级从 CubeMX 默认的 0 压到 10。 */
+  Encoder_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -277,7 +282,7 @@ void PeriphCommonClock_Config(void)
 
   /** Initializes the peripherals clock
   */
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_SDMMC;
   PeriphClkInitStruct.PLL2.PLL2M = 2;
   PeriphClkInitStruct.PLL2.PLL2N = 16;
   PeriphClkInitStruct.PLL2.PLL2P = 2;
@@ -286,6 +291,7 @@ void PeriphCommonClock_Config(void)
   PeriphClkInitStruct.PLL2.PLL2RGE = RCC_PLL2VCIRANGE_3;
   PeriphClkInitStruct.PLL2.PLL2VCOSEL = RCC_PLL2VCOWIDE;
   PeriphClkInitStruct.PLL2.PLL2FRACN = 0;
+  PeriphClkInitStruct.SdmmcClockSelection = RCC_SDMMCCLKSOURCE_PLL2;
   PeriphClkInitStruct.AdcClockSelection = RCC_ADCCLKSOURCE_PLL2;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
   {
