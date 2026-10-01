@@ -153,10 +153,10 @@ void StartDefaultTask(void *argument)
 
   for(;;)
   {
+   
     int16_t encoder_data = Encoder_GetCount();
-    uart1_printf("%d\r\n", (int)encoder_data);
-    
-    osDelay(10);
+    uart1_printf("%d\r\n",(uint32_t)encoder_data);
+    osDelay(5);
 
     // const uint32_t now = OSC_PROBE_CYC;
     // if (firstPrint || ((uint32_t)(now - lastPrint) >= SystemCoreClock))

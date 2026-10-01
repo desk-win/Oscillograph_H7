@@ -439,7 +439,7 @@
             "Type": "Button",
             "Name": "button1",
             "X": 625,
-            "Y": 156,
+            "Y": 201,
             "Width": 175,
             "Height": 50,
             "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_normal.png",
@@ -449,7 +449,7 @@
             "Type": "TextArea",
             "Name": "textArea1",
             "X": 688,
-            "Y": 169,
+            "Y": 213,
             "Width": 48,
             "Height": 24,
             "TextId": "__SingleUse_0ZQO",
@@ -736,7 +736,7 @@
             "Type": "ButtonWithLabel",
             "Name": "Setting",
             "X": 625,
-            "Y": 74,
+            "Y": 94,
             "Width": 175,
             "Height": 50,
             "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_small_rounded_pressed.png",
@@ -762,6 +762,16 @@
             "Height": 50,
             "Pressed": "__generated\\alternate_theme_images_widgets_togglebutton_medium_rounded_text_on_light.png",
             "Released": "__generated\\alternate_theme_images_widgets_togglebutton_medium_rounded_text_off_normal.png"
+          },
+          {
+            "Type": "ToggleButton",
+            "Name": "toggleButton2",
+            "X": 733,
+            "Y": 437,
+            "Width": 62,
+            "Height": 34,
+            "Pressed": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_on_action.png",
+            "Released": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_off_dark.png"
           }
         ],
         "Interactions": [

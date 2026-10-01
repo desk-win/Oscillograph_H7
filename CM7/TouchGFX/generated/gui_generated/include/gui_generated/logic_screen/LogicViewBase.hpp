@@ -62,6 +62,7 @@ protected:
     touchgfx::PainterRGB565 line8Painter;
     touchgfx::ButtonWithLabel Setting;
     touchgfx::ToggleButton toggleButton1;
+    touchgfx::ToggleButton toggleButton2;
 
 private:
 

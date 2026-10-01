@@ -58,6 +58,24 @@ public:
         (void)ncols;
     }
 
+    /**
+     * 编码器转过了。delta 是自上次调用以来的**净格数**, 正 = 顺时针。
+     *
+     * 默认空实现 —— 只有想用编码器的屏才覆盖它 (目前是逻辑分析仪, 调时基)。
+     * 不覆盖就等于把这一把转动丢掉, 这正是想要的: 编码器在别的屏上不该有作用。
+     *
+     * 用 ModelListener 派发而不是让 Model 去判"现在是不是逻辑屏": MVPApplication
+     * 每次切屏都会 model->bind(newPresenter) (mvp/MVPApplication.hpp), 所以
+     * 收到这个回调的永远是当前活动屏, 不用另外记一个"当前屏"的状态。
+     *
+     * 和 logicUpdated 一样, 它只在真的转过了的时候才会被调到 (Model::tick 里
+     * 先判 delta != 0), 不是每个 tick 都来一次。
+     */
+    virtual void encoderTurned(int16_t delta)
+    {
+        (void)delta;
+    }
+
 protected:
     Model* model;
 };

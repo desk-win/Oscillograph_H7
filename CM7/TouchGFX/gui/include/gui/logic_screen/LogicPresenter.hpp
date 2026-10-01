@@ -55,6 +55,15 @@ public:
     virtual void logicUpdated(const uint16_t* level, const uint16_t* change,
                               uint32_t ncols);
 
+    /**
+     * 编码器转过了 (来自 ModelListener)。在这一屏上它的意思是"调时基":
+     * 顺时针放大, 逆时针缩小, delta 是净格数。
+     *
+     * 只在这一屏被覆盖 —— 别的屏拿到的是默认空实现, 转动直接丢掉。切屏由
+     * MVPApplication 负责重新 bind, 所以不用自己判"现在是不是这一屏"。
+     */
+    virtual void encoderTurned(int16_t delta);
+
 private:
     LogicPresenter();
 

@@ -1,5 +1,5 @@
 CompileFlags:
-  CompilationDatabase: CM4/build/Debug
+  CompilationDatabase: CM4/build
 If:
   PathMatch: CM4/.*
 

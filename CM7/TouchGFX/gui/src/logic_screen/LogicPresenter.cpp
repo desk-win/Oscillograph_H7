@@ -42,3 +42,10 @@ void LogicPresenter::logicUpdated(const uint16_t* level, const uint16_t* change,
 {
     view.updateLogic(level, change, ncols);
 }
+
+void LogicPresenter::encoderTurned(int16_t delta)
+{
+    /* 只转交给 Model。重画不用在这里操心 —— 换了档位之后那一屏是被重新归约
+     * 出来的, 会照常走 logicUpdated → view.updateLogic 那条路回来。 */
+    model->zoomLogicTimebase(delta);
+}

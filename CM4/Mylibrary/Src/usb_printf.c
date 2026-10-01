@@ -26,7 +26,7 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
  *
  * **这两个 100 必须脱钩** —— 要么关打印 (现在这样), 要么把 CDC_TX_TIMEOUT_MS
  * 压到 0 (端点忙就丢这一行, 不阻塞), 二者至少做一个。 */
-#define USB_PRINTF_ENABLE   0
+#define USB_PRINTF_ENABLE   1
 
 /* 上一包没发完时 CDC_Transmit_FS 直接返回 USBD_BUSY 且什么都不做, 必须等端点腾空。
  *

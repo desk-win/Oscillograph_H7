@@ -79,6 +79,45 @@ static uint32_t s_led_on;
 static uint32_t s_prev16;
 static uint32_t s_prev32;
 
+/* ---- 显示窗口 (时基) ----
+ *
+ * 一屏 520 列铺在 [0, span] 这段采样区间上 (闭区间, 所以是 span+1 个采样点):
+ * span 越大 = 时基越慢 = 波形越"挤", span 越小 = 越放大。窗口起点恒为 0。
+ *
+ * 这张表是"一屏覆盖多少个采样点", 从粗到细排, 1-2-5 序列。档位 0 是"整屏",
+ * **不查表** —— 它等于这次采集实际覆盖的长度 s_last_ts, 是个变数: 边沿密的
+ * 采集可能只有几万个采样点 (记录区先满), 空闲超时停的能到 2000 万。
+ *
+ * 时间换算 @20 MSa/s: 519 ≈ 26 µs, 1000 = 50 µs, 20000 = 1 ms, 2000000 = 100 ms。
+ * 以后要在界面上显示成 µs/格, 拿这里的 span 除以 LOG_CTRL->fs_hz (CM4 实测
+ * 发布的那个, 不是标称的 20 MHz)。
+ *
+ * 下面这三个量只被屏幕任务 (Model::tick) 读写, 半帧中断完全不碰 —— 所以不用
+ * volatile, 也不用和 s_build_seq 那一套打交道。 */
+static const uint32_t s_span_tab[] = {
+    20000000u,          /*    1 s   */
+    10000000u,          /*  500 ms  */
+     5000000u,          /*  250 ms  */
+     2000000u,          /*  100 ms  */
+     1000000u,          /*   50 ms  */
+      500000u,          /*   25 ms  */
+      200000u,          /*   10 ms  */
+      100000u,          /*    5 ms  */
+       50000u,          /*  2.5 ms  */
+       20000u,          /*    1 ms  */
+       10000u,          /*  500 µs  */
+        5000u,          /*  250 µs  */
+        2000u,          /*  100 µs  */
+        1000u,          /*   50 µs  */
+   LOG_TRACE_SPAN_MIN,  /*   26 µs  <- 最细, 一列正好一个采样点 */
+};
+
+#define LOG_SPAN_COUNT  ((uint32_t)(sizeof(s_span_tab) / sizeof(s_span_tab[0])))
+#define LOG_SPAN_FULL   0u      /* 档位 0: 整屏 (= s_last_ts) */
+
+static uint32_t s_span_idx;     /* 当前档位: 0 = 整屏, k >= 1 = s_span_tab[k-1] */
+static uint32_t s_view_dirty;   /* 档位变过了, 等 Poll 重算一屏 */
+
 /* ---- 出图用的列数据 ---- */
 static uint16_t s_level[LOG_TRACE_COLS];
 static uint16_t s_change[LOG_TRACE_COLS];
@@ -195,6 +234,53 @@ static void log_scan_half(const uint32_t *w, uint32_t nwords, uint32_t base_inde
 }
 
 /* ===========================================================================
+ * 显示窗口 (时基) —— 见文件上方 s_span_tab 那一段
+ * ========================================================================= */
+
+/**
+*   @brief 当前一屏覆盖多少个采样点
+*
+*   @note  整屏档直接返回 s_last_ts (可能是 0 —— 只有记录 0 的那种采集, 交给
+*          log_build_cols 里那个三元判断处理)。其余档返回查表值和 s_last_ts
+*          中**较小**的那个: 表里比这次采集还长的档会退化成整屏, 而不是去画
+*          一段根本不存在的采样区间。正常路径下 Zoom 已经把档位夹在有意义的
+*          范围里了, 这里的 min 是兜底 —— s_last_ts 是中断写的, 多一道保险
+*          比省一个比较划算。
+*/
+static uint32_t view_span(void)
+{
+    if (s_span_idx == LOG_SPAN_FULL) {
+        return s_last_ts;
+    }
+
+    const uint32_t s = s_span_tab[s_span_idx - 1u];
+    return (s < s_last_ts) ? s : s_last_ts;
+}
+
+/**
+*   @brief 最粗的那个"真档"的档位号
+*
+*   @note  表里排在它前面的档都比这次采集还长, 选中了 view_span() 会夹回整屏,
+*          表现为"转好几格画面不动"。所以从整屏转进第一档时直接跳到这儿, 保证
+*          每一格都看得见变化。
+*
+*          表是从粗到细排的, 所以"第一条比 s_last_ts 短的"就是最粗的有用档。
+*          循环走完说明连表里最细的那条 (LOG_TRACE_SPAN_MIN) 都不比 s_last_ts
+*          短 —— 也就是这次采集连一屏都铺不满, 压根没得放大。
+*
+*   @return 档位号 (>= 1); LOG_SPAN_FULL 表示这次采集太短, 没有更细的档。
+*/
+static uint32_t span_idx_lo(void)
+{
+    for (uint32_t i = 0u; i < LOG_SPAN_COUNT; i++) {
+        if (s_span_tab[i] < s_last_ts) {
+            return i + 1u;
+        }
+    }
+    return LOG_SPAN_FULL;
+}
+
+/* ===========================================================================
  * 记录 → 列 (docs/log_plan.md §8.7)
  * ========================================================================= */
 static void log_build_cols(void)
@@ -214,8 +300,13 @@ static void log_build_cols(void)
     uint16_t prev = lvl;
     uint16_t chg  = 0u;
 
-    /* 记录 0 的 ts 恒为 0, 所以 s_last_ts 就是这次采集覆盖的采样区间长度 */
-    const uint32_t ts1 = s_last_ts;
+    /* 窗口长度。记录 0 的 ts 恒为 0, 而窗口左对齐, 所以 ts1 直接就是窗口长度,
+     * 起点不用再存一个变量。
+     *
+     * 整屏档时 ts1 == s_last_ts —— 和加时基之前逐像素一样 (回归基准)。放大之
+     * 后 ts1 < s_last_ts, 后半截那些记录因为 ts > ts1, 下面那个 while 循环不
+     * 会吃它们, 自然就不会被画出来。 */
+    const uint32_t ts1 = view_span();
     uint32_t ri = 1u;                   /* 从记录 1 开始 */
 
     for (uint32_t c = 0u; c < LOG_TRACE_COLS; c++) {
@@ -284,6 +375,8 @@ void LOG_Trace_Init(void)
     s_built_seq      = 0u;
     s_start_tick     = 0u;
     s_led_on         = 0u;
+    s_span_idx       = LOG_SPAN_FULL;
+    s_view_dirty     = 0u;
 
     /* 只碰 CM7 写的三个字段 (见 sharedconfig.h 的写者约定), CM4 那几个留给
      * CM4 的 LOG_Init()。 */
@@ -323,6 +416,12 @@ void LOG_Trace_Start(void)
     s_full           = 0u;
     s_ncols          = 0u;
     s_result_pending = 0u;
+
+    /* 新的一轮从整屏开始 —— 上一轮放大到的档位对这一次的 s_last_ts 未必有意
+     * 义 (可能比这次采集还长), 留着的话开局就是一张莫名其妙的画面。
+     * s_view_dirty 一起清: 上一轮欠着的那次重算不该落到新采集头上。 */
+    s_span_idx       = LOG_SPAN_FULL;
+    s_view_dirty     = 0u;
 
     /* 上一屏的记号不用清: s_build_seq 只增不减, tick 那边比的是"变没变"，
      * 清成 0 反而可能和 s_built_seq 撞上而漏掉一次归约。 */
@@ -420,11 +519,56 @@ void LOG_Trace_Clear(void)
      * 决定"要不要擦控件"的 (见 LogicView::setupScreen)。 */
     s_ncols          = 0u;
     s_result_pending = 0u;
+
+    /* 时基也回到整屏 —— 和 LOG_Trace_Start 那一批保持一致。Cancel 之后屏幕上
+     * 是空的, 再下次采集是从零开始的一轮, 档位没有理由留着上一次的。 */
+    s_span_idx       = LOG_SPAN_FULL;
+    s_view_dirty     = 0u;
 }
 
 int LOG_Trace_IsRunning(void)
 {
     return s_running != 0u;
+}
+
+void LOG_Trace_Zoom(int delta)
+{
+    /* 采集中不响应。两条理由, 头文件里写了 —— 记录区正被中断追加, 而且屏幕上
+     * 那一屏本来就是上一次采完的旧图。
+     *
+     * 注意这个 return 不代表"这一格白转了": Encoder_Increment 已经把增量取走
+     * 了 (last_count 更新过), 所以不会攒着等采集结束再一次性爆发。 */
+    if (delta == 0 || s_running != 0u) {
+        return;
+    }
+
+    const uint32_t lo = span_idx_lo();
+    if (lo == LOG_SPAN_FULL) {
+        return;         /* 这次采集连一屏都铺不满, 没有更细的档可进 */
+    }
+
+    /* ---- 一格一格走 ----
+     *
+     * 两头的边界不一样, 是故意的: 最细的一头停在表尾 (LOG_SPAN_COUNT), 最粗的
+     * 一头停在"整屏" (LOG_SPAN_FULL) —— 整屏不是一个表项, 它是变数 s_last_ts,
+     * 永远比表里最粗那条更长。所以从 lo 再往外转一格是"退回整屏", 而不是停在
+     * lo 不动。 */
+    uint32_t idx = s_span_idx;
+    while (delta > 0 && idx != LOG_SPAN_COUNT) {
+        idx = (idx == LOG_SPAN_FULL) ? lo : idx + 1u;
+        delta--;
+    }
+    while (delta < 0 && idx != LOG_SPAN_FULL) {
+        idx = (idx > lo) ? idx - 1u : LOG_SPAN_FULL;
+        delta++;
+    }
+
+    if (idx == s_span_idx) {
+        return;         /* 已经顶着上界或下界, 别白白重算一屏 */
+    }
+
+    s_span_idx   = idx;
+    s_view_dirty = 1u;
 }
 
 /* ===========================================================================
@@ -517,9 +661,18 @@ void LOG_Trace_Poll(void)
      *
      * 为什么由这个记号触发而不是"采集中就不管": 采集是在中断里停的 (记录满 /
      * 空闲超时), 停的那一刻 tick 还不知道 —— 得靠这里把最后一屏算出来, 不然
-     * 界面就永远停在采集开始那一刻的空屏上。 */
-    if (s_build_seq != s_built_seq) {
+     * 界面就永远停在采集开始那一刻的空屏上。
+     *
+     * 第二个触发源是时基变了 (LOG_Trace_Zoom)。归约是"读 s_rec_count / s_last_ts
+     * / 整片记录区"的活, 而中断随时会进来写它们 —— 之所以一直只有这一个调用点,
+     * 就是为了让"什么时候可以安全地读"只有一个答案。缩放想重算也不能自己伸手
+     * 去调 log_build_cols, 只能在这里挂个记号, 走同一条路。
+     *
+     * 两个条件合并成一次归约 (不是两次): 一帧里既采完了又转了编码器的话, 只算
+     * 一遍, 而且用的是最新的档位 —— 正是想要的。 */
+    if (s_build_seq != s_built_seq || s_view_dirty != 0u) {
         s_built_seq = s_build_seq;
+        s_view_dirty = 0u;
         log_build_cols();
     }
 

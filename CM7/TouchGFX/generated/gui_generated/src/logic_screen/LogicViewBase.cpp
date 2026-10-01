@@ -29,12 +29,12 @@ LogicViewBase::LogicViewBase() :
     line2_1.setLineEndingStyle(touchgfx::Line::SQUARE_CAP_ENDING);
     add(line2_1);
 
-    button1.setXY(625, 156);
+    button1.setXY(625, 201);
     button1.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_NORMAL_ID));
     button1.setAction(buttonCallback);
     add(button1);
 
-    textArea1.setXY(688, 169);
+    textArea1.setXY(688, 213);
     textArea1.setColor(touchgfx::Color::getColorFromRGB(247, 240, 240));
     textArea1.setLinespacing(0);
     textArea1.setTypedText(touchgfx::TypedText(T___SINGLEUSE_0ZQO));
@@ -160,7 +160,7 @@ LogicViewBase::LogicViewBase() :
     line8.setLineEndingStyle(touchgfx::Line::SQUARE_CAP_ENDING);
     add(line8);
 
-    Setting.setXY(625, 74);
+    Setting.setXY(625, 94);
     Setting.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_SMALL_ROUNDED_PRESSED_ID));
     Setting.setLabelText(touchgfx::TypedText(T___SINGLEUSE_R7ZP));
     Setting.setLabelColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
@@ -171,6 +171,10 @@ LogicViewBase::LogicViewBase() :
     toggleButton1.setXY(657, 0);
     toggleButton1.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_MEDIUM_ROUNDED_TEXT_OFF_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_MEDIUM_ROUNDED_TEXT_ON_LIGHT_ID));
     add(toggleButton1);
+
+    toggleButton2.setXY(733, 437);
+    toggleButton2.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_OFF_DARK_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_ON_ACTION_ID));
+    add(toggleButton2);
 }
 
 LogicViewBase::~LogicViewBase()

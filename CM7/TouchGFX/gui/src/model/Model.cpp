@@ -1,6 +1,7 @@
 #include <gui/model/Model.hpp>
 #include <gui/model/ModelListener.hpp>
 #include "osc_probe.h"
+#include "encoder.h"
 
 /* ===========================================================================
  * 分半开关 —— 只用来定位"卡在哪", 定位完请都改回 0
@@ -62,6 +63,18 @@ void Model::stopLogicCapture()
 bool Model::isLogicRunning() const
 {
     return LOG_Trace_IsRunning() != 0;
+}
+
+void Model::zoomLogicTimebase(int delta)
+{
+    /* 只是转交。档位表 / 上下界 / "采集中不响应" 全在 logic_trace.c 里 ——
+     * 那些判断要用采样序号, 是那一层的语言, 不该渗到 GUI 这一侧来。
+     *
+     * 注意这一句不会立刻改到屏幕: LOG_Trace_Zoom 只置一个"该重算"的记号, 真正
+     * 归约还是 LOG_Trace_Poll 里做的。tick() 里读编码器那一段特意排在
+     * LOG_Trace_Poll() 前面, 所以同一帧就会算出新的档位并交给 View —— 转一格
+     * 当帧生效, 不用等下一帧。 */
+    LOG_Trace_Zoom(delta);
 }
 
 void Model::clearLogicData()
@@ -135,6 +148,29 @@ void Model::tick()
         }
     }
     lastEntry = now;
+
+    /* ---- 编码器 ----
+     *
+     * 必须**每个 tick 都读**, 不管当前是哪一屏: Encoder_Increment() 是有状态的
+     * (它写自己那份 last_count), 不读的话增量会一直攒着, 等切回逻辑屏的那一下
+     * 一次性爆发 —— 表现出来是"在别的屏上转了转, 回来波形突然跳到底"。
+     *
+     * 派发到 modelListener 而不是在这里判"是不是逻辑屏": 切屏时 MVPApplication
+     * 会重新 bind, 所以 modelListener 恒等于当前活动屏, 不覆盖 encoderTurned 的
+     * 屏 (示波器那两屏) 拿到的是默认空实现, 等于把这把转动丢掉。
+     *
+     * 放在 LOG_Trace_Poll() **之前**: 缩放只是置一个"该重算"的记号, 真正归约是
+     * Poll 干的 —— 这样同一帧里就能把新档位算出来并交出去, 转一格当天生效,
+     * 而不是等到下一帧。
+     *
+     * 位置和下面那个"两路都停了就提前返回"的守卫没关系: 这一段在它前面。 */
+    {
+        const int16_t enc = Encoder_Increment();
+        if (enc != 0 && modelListener != 0)
+        {
+            modelListener->encoderTurned(enc);
+        }
+    }
 
     /* 逻辑分析仪: 采半帧、找跳变、写记录全在 HSEM 中断里做完了 (和示波器同一种
      * 驱动方式, 见 logic_trace.c 的 LOG_Trace_OnHalfFrame); 这里只干没期限的那

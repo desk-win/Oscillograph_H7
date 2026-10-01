@@ -55,7 +55,7 @@ extern "C" {
  * 几个上升沿。HAL 的 tick 是 1 ms 一格, 所以这个数实际分辨到 1~2 ms; 人手最
  * 快也就转到 20~50 格/秒 (20~50 ms 一格), 不会误伤。
  * 填 0u 就是不消抖 (下面那个判断是无符号减法, 差值恒不小于 0)。 */
-#define ENCODER_DEBOUNCE_MS  2u
+#define ENCODER_DEBOUNCE_MS  5u
 
 /* EXTI1 的抢占优先级。CubeMX 勾 NVIC 时默认给的是 0 (最高), 那个太扎眼了 ——
  * 编码器只是个输入, 掉一次最多是时基跳一格。这里压到 10: 比 LTDC / DMA2D 的
@@ -65,6 +65,21 @@ extern "C" {
  * 如果哪天在 CubeMX 的 NVIC 面板里也把它改成 10, Encoder_Init() 里那行覆盖
  * 就是多余的, 可以删。 */
 #define ENCODER_IRQ_PRIORITY 10u
+
+// 按键状态枚举
+typedef enum{
+    KEY_STATE_RELEASE = 0,           // 按键按键未按下
+    KEY_STATE_PRESS_PREPARE,      // 按下消抖确认
+    KEY_STATE_PRESSED,            // 确认按下
+    KEY_STATE_RELEASE_PREPARE     // 释放消抖确认
+} KeyState_t;
+
+// 按键事件枚举
+typedef enum{
+    KEY_EVENT_RELEASE = 0,      // 释放事件
+    KEY_EVENT_PRESS,            // 单击/按下事件
+    KEY_EVENT_LONGPRESS         // 长按事件
+} KeyEvent_t;
 
 /**
  * 当前计数值。中断里加减, 外面**只读** —— 16 位对齐访问在 M7 上是原子的,
@@ -96,6 +111,9 @@ int16_t Encoder_GetCount(void);
  * 的: 档位已经到头顶了, 不该再往外跳。
  */
 int16_t Encoder_Increment(void);
+
+KeyEvent_t Encoder_Key(void);
+
 
 #ifdef __cplusplus
 }

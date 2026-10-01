@@ -86,6 +86,14 @@ public:
         return logicNcols;
     }
 
+    /**
+     * 逻辑屏的编码器: 调时基。delta 是净格数, 正 = 顺时针 = 放大。
+     *
+     * 这一层只是把调用转给 LOG_Trace_Zoom —— 档位表、上下界、"采集中不响应"
+     * 全在 logic_trace.c 里, GUI 这一侧不需要知道采样序号这回事。
+     */
+    void zoomLogicTimebase(int delta);
+
 protected:
     ModelListener* modelListener;
 

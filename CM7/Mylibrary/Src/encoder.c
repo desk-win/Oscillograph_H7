@@ -1,6 +1,8 @@
 #include "encoder.h"
+#include "main.h"
 #include "stm32h747xx.h"
 #include "stm32h7xx_hal_gpio.h"
+#include <stdint.h>
 
 /* A 相上升沿 → 动 encoder_count 的唯一入口 */
 static void Encoder_OnAEdge(void);
@@ -27,22 +29,16 @@ static void Encoder_OnAEdge(void)
         return;
     }
     last_edge_tick = HAL_GetTick();
-
-    static uint8_t time = 0;
-    if (time == 2) {
-        time=0;
+    
+    GPIO_PinState A_P = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_1);
+    GPIO_PinState B_P = HAL_GPIO_ReadPin(ENCODER_B_PORT, ENCODER_B_PIN);
+    if ((B_P == GPIO_PIN_SET) && (A_P == GPIO_PIN_RESET)){
+        encoder_count += ENCODER_DIR_SIGN;
     }
-    time++;
-    /* 在 A 的上升沿上采样 B 的电平定方向 */
-    if (HAL_GPIO_ReadPin(ENCODER_B_PORT, ENCODER_B_PIN) == GPIO_PIN_SET){
-        if (time == 1) {
-            encoder_count ++;
-        }      
-    }else{
-        if (time == 1) {
-            encoder_count --;
-        }
+    else if ((B_P == GPIO_PIN_RESET) && (A_P == GPIO_PIN_RESET)) {
+        encoder_count -= ENCODER_DIR_SIGN;
     }
+        
     /* 边界: 到顶 / 到底就停在边上, 不回绕 */
     if (encoder_count > ENCODER_COUNT_MAX){
         encoder_count = ENCODER_COUNT_MAX;
@@ -110,4 +106,69 @@ int16_t Encoder_Increment(void)
 
     last_count = now;
     return delta;
+}
+
+#define LONG_PRESS_TIME     200     // 长按持续时间，即2秒
+
+/**
+*   @brief 编码器上的开关，状态机，每隔10ms调用一次，支持长按和单击
+*/
+
+KeyEvent_t Encoder_Key(void) {
+    static KeyState_t current_keystate = KEY_STATE_RELEASE;
+    KeyEvent_t return_keyevent = KEY_EVENT_RELEASE;
+    
+    GPIO_PinState gpio_state = HAL_GPIO_ReadPin(EC_SW_GPIO_Port, EC_SW_Pin);
+    
+    static uint16_t presstime = 0;  // 长按时间计数
+    static uint8_t longpress = 0;   // 标记本次按下过程是否已触发长按
+
+    switch (current_keystate) {
+        case KEY_STATE_RELEASE:
+            if (gpio_state == GPIO_PIN_RESET) { // 检测到按下（低电平）
+                current_keystate = KEY_STATE_PRESS_PREPARE;
+            }
+            break;
+
+        case KEY_STATE_PRESS_PREPARE:
+            if (gpio_state == GPIO_PIN_RESET) { // 确认按下消抖完成
+                current_keystate = KEY_STATE_PRESSED;
+                presstime = 0; // 进入按下状态时，必须清零计时器
+                longpress = 0; // 进入按下状态时，清零长按标志位
+            } else {
+                current_keystate = KEY_STATE_RELEASE;
+            }
+            break;
+
+        case KEY_STATE_PRESSED:
+            if (gpio_state == GPIO_PIN_SET) { // 检测到抬起
+                current_keystate = KEY_STATE_RELEASE_PREPARE;
+            } else { // 持续按下中
+                if (longpress == 0) { // 只有未触发过长按时才计数，保证长按只触发一次
+                    presstime++;
+                    if (presstime >= LONG_PRESS_TIME) {
+                        longpress = 1;
+                        return_keyevent = KEY_EVENT_LONGPRESS; // 触发长按事件
+                    }
+                }
+            }
+            break;
+
+        case KEY_STATE_RELEASE_PREPARE:
+            if (gpio_state == GPIO_PIN_SET) { // 确认抬起消抖完成
+                current_keystate = KEY_STATE_RELEASE;
+                if (longpress == 0) {
+                    return_keyevent = KEY_EVENT_PRESS; // 只有没触发过长按时，松手才响应单击
+                }
+            } else { // 抬起过程中的干扰抖动，退回按下状态
+                current_keystate = KEY_STATE_PRESSED;
+            }
+            break;
+
+        default:
+            current_keystate = KEY_STATE_RELEASE;
+            break;
+    }
+
+    return return_keyevent;
 }
