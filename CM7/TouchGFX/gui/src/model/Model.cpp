@@ -65,16 +65,27 @@ bool Model::isLogicRunning() const
     return LOG_Trace_IsRunning() != 0;
 }
 
-void Model::zoomLogicTimebase(int delta)
+void Model::turnLogicEncoder(int delta)
 {
-    /* 只是转交。档位表 / 上下界 / "采集中不响应" 全在 logic_trace.c 里 ——
+    /* 只是转交。往哪个方向调 (调时基还是滚窗口) 由 logic_trace.c 按当前视图
+     * 模式决定; 档位表 / 窗口起点 / 上下界 / "采集中不响应" 也全在那边 ——
      * 那些判断要用采样序号, 是那一层的语言, 不该渗到 GUI 这一侧来。
      *
-     * 注意这一句不会立刻改到屏幕: LOG_Trace_Zoom 只置一个"该重算"的记号, 真正
+     * 注意这一句不会立刻改到屏幕: LOG_Trace_Turn 只置一个"该重算"的记号, 真正
      * 归约还是 LOG_Trace_Poll 里做的。tick() 里读编码器那一段特意排在
-     * LOG_Trace_Poll() 前面, 所以同一帧就会算出新的档位并交给 View —— 转一格
+     * LOG_Trace_Poll() 前面, 所以同一帧就会算出新的窗口并交给 View —— 转一格
      * 当帧生效, 不用等下一帧。 */
-    LOG_Trace_Zoom(delta);
+    LOG_Trace_Turn(delta);
+}
+
+void Model::toggleLogicViewMode()
+{
+    LOG_Trace_ToggleViewMode();
+}
+
+uint32_t Model::getLogicViewMode() const
+{
+    return LOG_Trace_GetViewMode();
 }
 
 void Model::clearLogicData()
@@ -170,6 +181,24 @@ void Model::tick()
         {
             modelListener->encoderTurned(enc);
         }
+    }
+
+    /* ---- 编码器上那个开关 (长按 = 切"调时基 / 滚窗口"两种模式) ----
+     *
+     * 每个 tick 都调, 不用卡节拍: Encoder_Key 内部按 HAL_GetTick 的毫秒计时
+     * (LONG_PRESS_TIME_MS), 不数调用次数 —— 这一帧是 16.7 ms 还是 20 ms 都不
+     * 影响长按判多久。
+     *
+     * 单击 (KEY_EVENT_PRESS) 直接丢掉, 不派发: 目前没有哪一屏要用它。
+     *
+     * 和 encoderTurned 一套派发: 收到它的恒是当前活动屏, 别的屏拿到的是默认空
+     * 实现, 等于把这下长按丢掉 —— 这正是想要的, 只有逻辑屏有两种模式可切。
+     *
+     * 放在 LOG_Trace_Poll() 前面: 切完模式不需要重算那一屏 (画面不变), 但跟在
+     * 后面的 Poll 顺手就把这一帧该出的图出了, 顺序上不欠任何东西。 */
+    if (Encoder_Key() == KEY_EVENT_LONGPRESS && modelListener != 0)
+    {
+        modelListener->encoderLongPressed();
     }
 
     /* 逻辑分析仪: 采半帧、找跳变、写记录全在 HSEM 中断里做完了 (和示波器同一种

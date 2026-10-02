@@ -108,19 +108,25 @@ int16_t Encoder_Increment(void)
     return delta;
 }
 
-#define LONG_PRESS_TIME     200     // 长按持续时间，即2秒
+/* 长按判定时间 (ms)。**用 HAL_GetTick 量, 不是数调用次数** —— 调用方的节拍不
+ * 固定 (现在挂在 TouchGFX 的 tick 上, 一次约 16.7 ms —— 那是 VSYNC 驱动的一帧),
+ * 数调用次数的话, 换个帧率长按时间就跟着变。 */
+#define LONG_PRESS_TIME_MS  2000u
 
 /**
-*   @brief 编码器上的开关，状态机，每隔10ms调用一次，支持长按和单击
+*   @brief 编码器上的开关，状态机，支持长按和单击
+*
+*   @note  调用节拍不要求固定, 但**至少要比抖动快** —— 消抖是按"连续两次读到同
+*          一个电平"判的 (按下确认和抬起确认各一次), 所以调用得比按键抖动快才
+*          压得住。挂在 60 Hz 的 tick 上一次 16.7 ms, 两次 33 ms, 够用。
 */
-
 KeyEvent_t Encoder_Key(void) {
     static KeyState_t current_keystate = KEY_STATE_RELEASE;
     KeyEvent_t return_keyevent = KEY_EVENT_RELEASE;
-    
+
     GPIO_PinState gpio_state = HAL_GPIO_ReadPin(EC_SW_GPIO_Port, EC_SW_Pin);
-    
-    static uint16_t presstime = 0;  // 长按时间计数
+
+    static uint32_t press_start_ms = 0;  // 进入"确认按下"状态的时刻 (HAL_GetTick)
     static uint8_t longpress = 0;   // 标记本次按下过程是否已触发长按
 
     switch (current_keystate) {
@@ -133,7 +139,7 @@ KeyEvent_t Encoder_Key(void) {
         case KEY_STATE_PRESS_PREPARE:
             if (gpio_state == GPIO_PIN_RESET) { // 确认按下消抖完成
                 current_keystate = KEY_STATE_PRESSED;
-                presstime = 0; // 进入按下状态时，必须清零计时器
+                press_start_ms = HAL_GetTick(); // 进入按下状态时，记下起点
                 longpress = 0; // 进入按下状态时，清零长按标志位
             } else {
                 current_keystate = KEY_STATE_RELEASE;
@@ -144,12 +150,12 @@ KeyEvent_t Encoder_Key(void) {
             if (gpio_state == GPIO_PIN_SET) { // 检测到抬起
                 current_keystate = KEY_STATE_RELEASE_PREPARE;
             } else { // 持续按下中
-                if (longpress == 0) { // 只有未触发过长按时才计数，保证长按只触发一次
-                    presstime++;
-                    if (presstime >= LONG_PRESS_TIME) {
-                        longpress = 1;
-                        return_keyevent = KEY_EVENT_LONGPRESS; // 触发长按事件
-                    }
+                /* 只有未触发过长时才判，保证长按只触发一次。用减法比较，跨 32 位
+                 * 回绕自动正确。 */
+                if (longpress == 0 &&
+                    (uint32_t)(HAL_GetTick() - press_start_ms) >= LONG_PRESS_TIME_MS) {
+                    longpress = 1;
+                    return_keyevent = KEY_EVENT_LONGPRESS; // 触发长按事件
                 }
             }
             break;

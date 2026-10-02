@@ -76,6 +76,20 @@ public:
         (void)delta;
     }
 
+    /**
+     * 编码器上那个开关被**长按**了 (约 2 s)。
+     *
+     * 和 encoderTurned 同一套派发: 默认空实现, 只有想用它的屏才覆盖 —— 收到它的
+     * 永远是当前活动屏, 别的屏等于把这下长按丢掉。目前只有逻辑分析仪覆盖它:
+     * 长按在"调时基"和"滚窗口"两种视图模式之间切。
+     *
+     * 单击 (KEY_EVENT_PRESS) 没人用, 所以 Model::tick 那边直接丢掉, 不派发 ——
+     * 以后要用再加一个 encoderPressed()。
+     */
+    virtual void encoderLongPressed()
+    {
+    }
+
 protected:
     Model* model;
 };

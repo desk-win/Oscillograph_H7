@@ -148,7 +148,8 @@ void LogicTraceWidget::draw(const touchgfx::Rect& invalidatedArea) const
 }
 
 LogicView::LogicView()
-    : runCallback(this, &LogicView::runCallbackHandler)
+    : runCallback(this, &LogicView::runCallbackHandler),
+      modeCallback(this, &LogicView::modeCallbackHandler)
 {
     /* 波形控件摆成 (96, 0, 520, 462) —— x 从 96 起 (和 Designer 里那 8 条 Line
      * 的左端对齐) 宽 520 到 616, y 从 0 起高 462 (最后一个框的底边是
@@ -175,6 +176,15 @@ void LogicView::setupScreen()
      * 读 Model 而不是指望开关自己的显示: ToggleButton 没有独立的状态位, 它的
      * 状态就是"现在显示的是哪张图"。 */
     toggleButton1.forceState(presenter->isLogicRunning());
+
+    /* 右下角那个视图模式开关 (toggleButton2): 接上回调 + 按 Model 摆一次。
+     *
+     * 摆一次是必须的 —— 长按编码器上的开关也能切模式, 而**切屏不会改模式**
+     * (状态在 logic_trace.c 里, 不跟界面走), 所以从别的屏切过来时, 开关显示的
+     * 那一面可能已经和实际模式对不上了。和 toggleButton1 一样以 Model 为准,
+     * 不读它现在显示的是哪一面。 */
+    toggleButton2.setAction(modeCallback);
+    updateLogicViewMode(presenter->getLogicViewMode());
 
     /* 波形控件也跟着对齐 —— 上一次采集的结果还在 Model 里, 切回来应该照原样
      * 显示, 而不是等下一次采集。 */
@@ -255,4 +265,30 @@ void LogicView::updateLogic(const uint16_t* level, const uint16_t* change,
      * 读 Model 而不是无条件 forceState(false): 万一哪天真加上了"采完自动接着
      * 采", 这里也不会把开关拨错。 */
     toggleButton1.forceState(presenter->isLogicRunning());
+}
+
+void LogicView::updateLogicViewMode(uint32_t mode)
+{
+    /* 开关的 ON 面 = 滚动查看模式。
+     *
+     * forceState 而不是靠 handleClickEvent 那一下翻图: 这条路上来的调用有两个
+     * 来源 —— 长按编码器上的开关 (图根本没被点过), 和点这个开关 (图已经被
+     * ToggleButton 自己翻过了)。forceState 对两边都成立, 而且和实际状态对齐,
+     * 所以两个来源走同一条路。 */
+    toggleButton2.forceState(mode == LOG_VIEW_SCROLL);
+}
+
+void LogicView::modeCallbackHandler(const touchgfx::AbstractButton& src)
+{
+    if (&src != &toggleButton2)
+    {
+        return;
+    }
+
+    /* 只认 Model, 不读开关当前是哪一面 —— 和 toggleButton1 一个道理。
+     *
+     * ToggleButton::handleClickEvent 是先换图再调 action 的, 所以这一下之后
+     * 开关显示的那一面正好就是新模式; 而且 Presenter 那边切完状态会回调
+     * updateLogicViewMode() 再摆一次 (幂等), 两条路都指向同一个结果。 */
+    presenter->toggleLogicViewMode();
 }

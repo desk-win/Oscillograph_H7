@@ -87,12 +87,27 @@ public:
     }
 
     /**
-     * 逻辑屏的编码器: 调时基。delta 是净格数, 正 = 顺时针 = 放大。
+     * 逻辑屏的编码器: 按**当前视图模式**调时基或者滚窗口。delta 是净格数,
+     * 正 = 顺时针。
      *
-     * 这一层只是把调用转给 LOG_Trace_Zoom —— 档位表、上下界、"采集中不响应"
-     * 全在 logic_trace.c 里, GUI 这一侧不需要知道采样序号这回事。
+     * 这一层只是把调用转给 LOG_Trace_Turn —— 往哪个方向走由 logic_trace.c 按
+     * 模式自己决定。档位表、窗口起点、上下界、"采集中不响应" 全在那边, GUI
+     * 这一侧不需要知道采样序号这回事。
      */
-    void zoomLogicTimebase(int delta);
+    void turnLogicEncoder(int delta);
+
+    /**
+     * 编码器上的开关长按: 在"调时基"和"滚窗口"两种视图模式之间切。
+     * 点右下角那个开关走的也是这条路。
+     *
+     * 模式存在 logic_trace.c 里 (它要拿它决定 Turn 干什么), 这儿是转发。界面
+     * 上那个开关的**图**不在这儿管 —— View 按 getLogicViewMode() 自己摆, 和
+     * toggleButton1 一样的做法。
+     */
+    void toggleLogicViewMode();
+
+    /** 当前视图模式 (LOG_VIEW_TIMEBASE / LOG_VIEW_SCROLL)。 */
+    uint32_t getLogicViewMode() const;
 
 protected:
     ModelListener* modelListener;

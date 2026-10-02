@@ -115,8 +115,28 @@ static const uint32_t s_span_tab[] = {
 #define LOG_SPAN_COUNT  ((uint32_t)(sizeof(s_span_tab) / sizeof(s_span_tab[0])))
 #define LOG_SPAN_FULL   0u      /* 档位 0: 整屏 (= s_last_ts) */
 
+/* 滚动模式下转一格挪多少: 一屏的 1/LOG_PAN_DIV。
+ *
+ * 别设成 1 (一格一整屏): 那样慢转也没法定到屏幕中间的位置。而"转得快就挪得远"
+ * 本来就有了 —— Encoder_Increment 给的是净格数, 步长乘它, 快转一帧能翻好几屏。
+ * 所以调粗这个数只会把最快那一档也一起拖慢, 换不到任何好处。4 是"慢转能定到
+ * 1/4 屏、快转一帧翻好几屏"的折中。 */
+#define LOG_PAN_DIV  4u
+
 static uint32_t s_span_idx;     /* 当前档位: 0 = 整屏, k >= 1 = s_span_tab[k-1] */
-static uint32_t s_view_dirty;   /* 档位变过了, 等 Poll 重算一屏 */
+static uint32_t s_view_dirty;   /* 档位 / 窗口起点变过了, 等 Poll 重算一屏 */
+
+/* 窗口起点 (采样序号): 窗口是 [s_view_start, s_view_start + view_span()]。
+ * 0 = 采集开头 —— 也就是加滚动之前那个"左对齐"的行为。缩放不动它, 只有滚动
+ * 模式动它, 所以不开滚动时它恒为 0。
+ *
+ * 不变式: s_view_start <= view_start_max(), 即窗口右沿不越过 s_last_ts。三个
+ * 地方维持它 —— Start / Clear 清成 0, view_pan 自己夹一次, view_zoom 缩小时再
+ * 夹一次 (span 变大, 原来合法的起点可能就越界了)。 */
+static uint32_t s_view_start;
+
+/* 视图模式 (LOG_VIEW_*)。和上面那几个一样, 只被屏幕任务读写, 中断完全不碰。 */
+static uint32_t s_view_mode;
 
 /* ---- 出图用的列数据 ---- */
 static uint16_t s_level[LOG_TRACE_COLS];
@@ -243,9 +263,9 @@ static void log_scan_half(const uint32_t *w, uint32_t nwords, uint32_t base_inde
 *   @note  整屏档直接返回 s_last_ts (可能是 0 —— 只有记录 0 的那种采集, 交给
 *          log_build_cols 里那个三元判断处理)。其余档返回查表值和 s_last_ts
 *          中**较小**的那个: 表里比这次采集还长的档会退化成整屏, 而不是去画
-*          一段根本不存在的采样区间。正常路径下 Zoom 已经把档位夹在有意义的
-*          范围里了, 这里的 min 是兜底 —— s_last_ts 是中断写的, 多一道保险
-*          比省一个比较划算。
+*          一段根本不存在的采样区间。正常路径下 view_zoom 已经把档位夹在有
+*          意义的范围里了, 这里的 min 是兜底 —— s_last_ts 是中断写的, 多一道
+*          保险比省一个比较划算。
 */
 static uint32_t view_span(void)
 {
@@ -255,6 +275,39 @@ static uint32_t view_span(void)
 
     const uint32_t s = s_span_tab[s_span_idx - 1u];
     return (s < s_last_ts) ? s : s_last_ts;
+}
+
+/**
+*   @brief 窗口起点能取到的最大值
+*
+*   @note  窗口右沿 (起点 + span) 不越过数据末尾 s_last_ts —— 越过去右边就是
+*          一段根本没采过的空白, 画出来是骗人的。
+*
+*          整屏档下 span == s_last_ts, 这个值恒为 0, 也就是**整屏档滚不动**:
+*          全都在屏幕上了, 本来也没得滚。采集太短 (s_last_ts <= span) 同理。
+*
+*          s_last_ts 是中断写的, 这里每次都重新读、用 min 兜底, 和 view_span()
+*          一样的路子 —— 多一个比较比省它划算。
+*/
+static uint32_t view_start_max(void)
+{
+    const uint32_t span = view_span();
+    return (s_last_ts > span) ? (s_last_ts - span) : 0u;
+}
+
+/**
+*   @brief 把窗口起点夹回合法范围
+*
+*   @note  给缩放用的: 缩小时 span 变大, 原来合法的起点可能越过新的右界 ——
+*          夹回来就是"窗口整体滑到采集末尾贴住"。平移 (view_pan) 自己会夹,
+*          不用再走这儿。
+*/
+static void view_start_clamp(void)
+{
+    const uint32_t hi = view_start_max();
+    if (s_view_start > hi) {
+        s_view_start = hi;
+    }
 }
 
 /**
@@ -280,9 +333,139 @@ static uint32_t span_idx_lo(void)
     return LOG_SPAN_FULL;
 }
 
+/**
+*   @brief 时基模式: 转一格走一个档位
+*
+*   @note  两头的边界不一样, 是故意的: 最细的一头停在表尾 (LOG_SPAN_COUNT),
+*          最粗的一头停在"整屏" (LOG_SPAN_FULL) —— 整屏不是一个表项, 它是变数
+*          s_last_ts, 永远比表里最粗那条更长。所以从 lo 再往外转一格是"退回
+*          整屏", 而不是停在 lo 不动。
+*
+*          起点 t0 不动 (缩放的锚点是左沿): 放大时 span 变小, 右沿自己往里收;
+*          缩小时 span 变大, t0+span 可能越过 s_last_ts, 夹一次。
+*/
+static void view_zoom(int delta)
+{
+    const uint32_t lo = span_idx_lo();
+    if (lo == LOG_SPAN_FULL) {
+        return;         /* 这次采集连一屏都铺不满, 没有更细的档可进 */
+    }
+
+    /* ---- 一格一格走 ---- */
+    uint32_t idx = s_span_idx;
+    while (delta > 0 && idx != LOG_SPAN_COUNT) {
+        idx = (idx == LOG_SPAN_FULL) ? lo : idx + 1u;
+        delta--;
+    }
+    while (delta < 0 && idx != LOG_SPAN_FULL) {
+        idx = (idx > lo) ? idx - 1u : LOG_SPAN_FULL;
+        delta++;
+    }
+
+    if (idx == s_span_idx) {
+        return;         /* 已经顶着上界或下界, 别白白重算一屏 */
+    }
+
+    s_span_idx = idx;
+    view_start_clamp();     /* 缩小之后原来的起点可能越界, 夹回来 */
+    s_view_dirty = 1u;
+}
+
+/**
+*   @brief 滚动模式: 把窗口前后挪
+*
+*   @note  一格挪 1/LOG_PAN_DIV 屏, **乘上净格数** —— 转得快就挪得远, 加速是
+*          白来的, 不用另做一套。
+*
+*          delta 正 = 顺时针 = 往**更晚**的数据走 (画面往左滚), 和"顺时针 =
+*          放大/前进"的直觉一致。
+*
+*          两头停住, 不回绕: 夹在 [0, view_start_max()] 里。顶着界的时候直接
+*          返回, 免得白重算一屏 —— 顺带也让"整屏档滚不动"表现为干干净净的
+*          无操作 (那里 view_start_max() 恒为 0)。
+*/
+static void view_pan(int delta)
+{
+    const uint32_t span = view_span();
+
+    uint32_t step = span / LOG_PAN_DIV;
+    if (step == 0u) {
+        /* span 比 LOG_PAN_DIV 还小。有 LOG_TRACE_SPAN_MIN (= 519) 兜着, 实际
+         * 走不到这儿; 留一道免得哪天表尾改了变成"转半天不动一格"。 */
+        step = 1u;
+    }
+
+    /* 64 位中间量: step 能到 5e6 (span 20e6 / 4), 净格数理论上能到 9999
+     * (ENCODER_COUNT_MAX), 乘出来 5e10, 32 位装不下。 */
+    const int64_t hi = (int64_t)view_start_max();
+    int64_t       t  = (int64_t)s_view_start + (int64_t)delta * (int64_t)step;
+
+    if (t < 0)  t = 0;
+    if (t > hi) t = hi;
+
+    if ((uint32_t)t == s_view_start) {
+        return;         /* 顶着界了, 别白白重算一屏 */
+    }
+
+    s_view_start = (uint32_t)t;
+    s_view_dirty = 1u;
+}
+
 /* ===========================================================================
  * 记录 → 列 (docs/log_plan.md §8.7)
  * ========================================================================= */
+
+/**
+*   @brief 二分找"窗口左沿之前最后一条记录"的下标 (严格的 ts < t)
+*
+*   @param t 窗口起点 (采样序号)
+*   @param n 记录条数 (>= 1, 调用点保证)
+*
+*   @note  窗口能滑动之后, "左沿那一刻的电平"不再等于记录 0 的电平了 —— 得从
+*          左沿**之前**的最后一条记录上取: 记录只记"变化之后的电平", 那条记录
+*          的电平从它之后一直保持到下一个跳变, 正好就是左沿该画的那个值。
+*
+*          **严格小于, 不是 "<= "**, 这一位差是故意的: ts 正好等于 t 的记录留在
+*          窗口里, 由下面那个列循环当成"第 0 列里发生的变化"吃掉。写成 <= 的话
+*          这些记录会被当成左沿的起点电平, 那一列的竖条就没了 —— t = 0 时它正好
+*          就是采集的第一个样本, 那是**回归基准**上本来有的一根竖条。
+*
+*          ts 单调不减 (半帧序号 × 8192 + 半帧内偏移, 只在跳变时写), 所以能二分。
+*          同一时刻会有多条记录 (记录 0 的 ts 是 0, 第一个半帧里第一个样本的
+*          电平如果和它不同, 那条的 ts 也是 0), 所以找的是"最后一个满足的"。
+*
+*          n 能到 65536, 16 步, 比整片扫描便宜得多。
+*
+*   @return 下标 (0 <= 返回值 < n)。记录 0 的 ts 恒为 0, 所以 t = 0 (没得往前
+*           退) 时返回 0 —— 那正是"窗口左沿 = 记录 0"的老行为。
+*/
+static uint32_t rec_before(uint32_t t, uint32_t n)
+{
+    /* 记录 0 的 ts 是 0, 所以 t = 0 时它就已经不在窗口左边了 —— 拿它自己当起点,
+     * 后面那些 ts = 0 的记录由列循环处理。这也是不走二分的原因: 二分要求
+     * 至少有一个 ts < t 的元素兜底。 */
+    if (LOG_REC_BUF[0].ts >= t) {
+        return 0u;
+    }
+
+    uint32_t lo = 0u;               /* 不变式: LOG_REC_BUF[lo].ts < t */
+    uint32_t hi = n - 1u;
+
+    while (lo < hi) {
+        /* mid 上取整: 要有 lo = mid 也能往前推进的分支, 否则 lo == hi-1 时
+         * (lo+hi)/2 == lo, 死循环。 */
+        const uint32_t mid = lo + (hi - lo + 1u) / 2u;
+
+        if (LOG_REC_BUF[mid].ts < t) {
+            lo = mid;
+        } else {
+            hi = mid - 1u;
+        }
+    }
+
+    return lo;
+}
+
 static void log_build_cols(void)
 {
     const uint32_t n = s_rec_count;
@@ -295,26 +478,34 @@ static void log_build_cols(void)
         return;     /* 一条都没写上 (刚开就停), 什么都不画 */
     }
 
-    /* 记录 0 的电平就是整屏的起点 */
-    uint16_t lvl  = LOG_REC_BUF[0].smp;
+    /* 窗口长度和起点 —— 两个自由度, 见文件上方 s_view_start 那一段。
+     *
+     * 整屏档 + 起点 0 时 ts1 == s_last_ts —— 和加时基之前逐像素一样 (回归基准)。
+     * 放大之后 ts1 < s_last_ts, 窗口外那些记录因为 ts 落在 [t0, t0+ts1] 之外,
+     * 下面那个 while 循环不会吃它们, 自然就不会被画出来。 */
+    const uint32_t ts1 = view_span();
+    const uint32_t t0  = s_view_start;
+
+    /* 窗口左沿的电平 = 左沿**之前**最后一条记录的电平 (见 rec_before)。
+     * ri 从它的下一条开始 —— 前面那些全在窗口左边, 不吃。
+     *
+     * 起点为 0 时这就是老代码那句 "记录 0 的电平就是整屏的起点": rec_before(0)
+     * 返回 0, ri 从 1 开始, 一模一样。 */
+    uint32_t ri = rec_before(t0, n);
+
+    uint16_t lvl  = LOG_REC_BUF[ri].smp;
     uint16_t prev = lvl;
     uint16_t chg  = 0u;
-
-    /* 窗口长度。记录 0 的 ts 恒为 0, 而窗口左对齐, 所以 ts1 直接就是窗口长度,
-     * 起点不用再存一个变量。
-     *
-     * 整屏档时 ts1 == s_last_ts —— 和加时基之前逐像素一样 (回归基准)。放大之
-     * 后 ts1 < s_last_ts, 后半截那些记录因为 ts > ts1, 下面那个 while 循环不
-     * 会吃它们, 自然就不会被画出来。 */
-    const uint32_t ts1 = view_span();
-    uint32_t ri = 1u;                   /* 从记录 1 开始 */
+    ri++;
 
     for (uint32_t c = 0u; c < LOG_TRACE_COLS; c++) {
-        /* ts_c 用 64 位中间量: ts1 可以到 20e6 量级, 乘 520 在 32 位上会溢出 */
+        /* ts_c 用 64 位中间量: ts1 可以到 20e6 量级, 乘 520 在 32 位上会溢出。
+         * 加 t0 不会溢出 —— view_pan / view_start_clamp 保证了
+         * t0 + ts1 <= s_last_ts, 而 s_last_ts 是 32 位的采样序号。 */
         const uint32_t ts_c = (ts1 == 0u)
-                            ? 0u
-                            : (uint32_t)(((uint64_t)ts1 * (uint64_t)c)
-                                         / (uint64_t)(LOG_TRACE_COLS - 1u));
+                            ? t0
+                            : t0 + (uint32_t)(((uint64_t)ts1 * (uint64_t)c)
+                                              / (uint64_t)(LOG_TRACE_COLS - 1u));
 
         /* 把落进这一列的所有记录都吃掉: 这一列末尾的电平 = 最后一条的电平,
          * 这一列里跳过的通道 = 所有变化的并集。这样窄脉冲 (一列里翻好几个
@@ -377,6 +568,8 @@ void LOG_Trace_Init(void)
     s_led_on         = 0u;
     s_span_idx       = LOG_SPAN_FULL;
     s_view_dirty     = 0u;
+    s_view_start     = 0u;
+    s_view_mode      = LOG_VIEW_TIMEBASE;
 
     /* 只碰 CM7 写的三个字段 (见 sharedconfig.h 的写者约定), CM4 那几个留给
      * CM4 的 LOG_Init()。 */
@@ -419,9 +612,15 @@ void LOG_Trace_Start(void)
 
     /* 新的一轮从整屏开始 —— 上一轮放大到的档位对这一次的 s_last_ts 未必有意
      * 义 (可能比这次采集还长), 留着的话开局就是一张莫名其妙的画面。
-     * s_view_dirty 一起清: 上一轮欠着的那次重算不该落到新采集头上。 */
+     * s_view_dirty 一起清: 上一轮欠着的那次重算不该落到新采集头上。
+     * 窗口起点同理 —— 上一轮滚到哪儿对这一次毫无意义 (s_last_ts 换了个数,
+     * 不定式 s_view_start <= view_start_max() 都不一定还成立)。
+     *
+     * **视图模式不清**: 那是用户的偏好, 不是这一轮采集的状态。上一轮在滚动
+     * 模式, 这一轮接着在滚动模式。 */
     s_span_idx       = LOG_SPAN_FULL;
     s_view_dirty     = 0u;
+    s_view_start     = 0u;
 
     /* 上一屏的记号不用清: s_build_seq 只增不减, tick 那边比的是"变没变"，
      * 清成 0 反而可能和 s_built_seq 撞上而漏掉一次归约。 */
@@ -520,10 +719,14 @@ void LOG_Trace_Clear(void)
     s_ncols          = 0u;
     s_result_pending = 0u;
 
-    /* 时基也回到整屏 —— 和 LOG_Trace_Start 那一批保持一致。Cancel 之后屏幕上
-     * 是空的, 再下次采集是从零开始的一轮, 档位没有理由留着上一次的。 */
+    /* 时基和窗口起点也回到整屏/开头 —— 和 LOG_Trace_Start 那一批保持一致。
+     * Cancel 之后屏幕上是空的, 再下次采集是从零开始的一轮, 档位和滚动位置都
+     * 没有理由留着上一次的。
+     *
+     * 视图模式同样不清 (理由见 LOG_Trace_Start)。 */
     s_span_idx       = LOG_SPAN_FULL;
     s_view_dirty     = 0u;
+    s_view_start     = 0u;
 }
 
 int LOG_Trace_IsRunning(void)
@@ -531,7 +734,19 @@ int LOG_Trace_IsRunning(void)
     return s_running != 0u;
 }
 
-void LOG_Trace_Zoom(int delta)
+uint32_t LOG_Trace_GetViewMode(void)
+{
+    return s_view_mode;
+}
+
+void LOG_Trace_ToggleViewMode(void)
+{
+    /* 只有两个值, 不用夹: 进来的不是 SCROLL 就是 TIMEBASE。 */
+    s_view_mode = (s_view_mode == LOG_VIEW_SCROLL) ? LOG_VIEW_TIMEBASE
+                                                   : LOG_VIEW_SCROLL;
+}
+
+void LOG_Trace_Turn(int delta)
 {
     /* 采集中不响应。两条理由, 头文件里写了 —— 记录区正被中断追加, 而且屏幕上
      * 那一屏本来就是上一次采完的旧图。
@@ -542,33 +757,11 @@ void LOG_Trace_Zoom(int delta)
         return;
     }
 
-    const uint32_t lo = span_idx_lo();
-    if (lo == LOG_SPAN_FULL) {
-        return;         /* 这次采集连一屏都铺不满, 没有更细的档可进 */
+    if (s_view_mode == LOG_VIEW_SCROLL) {
+        view_pan(delta);
+    } else {
+        view_zoom(delta);
     }
-
-    /* ---- 一格一格走 ----
-     *
-     * 两头的边界不一样, 是故意的: 最细的一头停在表尾 (LOG_SPAN_COUNT), 最粗的
-     * 一头停在"整屏" (LOG_SPAN_FULL) —— 整屏不是一个表项, 它是变数 s_last_ts,
-     * 永远比表里最粗那条更长。所以从 lo 再往外转一格是"退回整屏", 而不是停在
-     * lo 不动。 */
-    uint32_t idx = s_span_idx;
-    while (delta > 0 && idx != LOG_SPAN_COUNT) {
-        idx = (idx == LOG_SPAN_FULL) ? lo : idx + 1u;
-        delta--;
-    }
-    while (delta < 0 && idx != LOG_SPAN_FULL) {
-        idx = (idx > lo) ? idx - 1u : LOG_SPAN_FULL;
-        delta++;
-    }
-
-    if (idx == s_span_idx) {
-        return;         /* 已经顶着上界或下界, 别白白重算一屏 */
-    }
-
-    s_span_idx   = idx;
-    s_view_dirty = 1u;
 }
 
 /* ===========================================================================
@@ -663,10 +856,11 @@ void LOG_Trace_Poll(void)
      * 空闲超时), 停的那一刻 tick 还不知道 —— 得靠这里把最后一屏算出来, 不然
      * 界面就永远停在采集开始那一刻的空屏上。
      *
-     * 第二个触发源是时基变了 (LOG_Trace_Zoom)。归约是"读 s_rec_count / s_last_ts
-     * / 整片记录区"的活, 而中断随时会进来写它们 —— 之所以一直只有这一个调用点,
-     * 就是为了让"什么时候可以安全地读"只有一个答案。缩放想重算也不能自己伸手
-     * 去调 log_build_cols, 只能在这里挂个记号, 走同一条路。
+     * 第二个触发源是窗口变了 (LOG_Trace_Turn → view_zoom / view_pan, 不管是
+     * 调时基还是滚动)。归约是"读 s_rec_count / s_last_ts / 整片记录区"的活,
+     * 而中断随时会进来写它们 —— 之所以一直只有这一个调用点, 就是为了让"什么
+     * 时候可以安全地读"只有一个答案。缩放/滚动想重算也不能自己伸手去调
+     * log_build_cols, 只能在这里挂个记号, 走同一条路。
      *
      * 两个条件合并成一次归约 (不是两次): 一帧里既采完了又转了编码器的话, 只算
      * 一遍, 而且用的是最新的档位 —— 正是想要的。 */

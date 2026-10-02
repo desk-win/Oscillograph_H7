@@ -88,6 +88,19 @@ public:
      */
     void updateLogic(const uint16_t* level, const uint16_t* change, uint32_t ncols);
 
+    /**
+     * 视图模式变了 —— 把右下角那个开关 (toggleButton2) 摆到对应的一面。
+     *
+     * 它是个**指示器**: 真正的状态在 logic_trace.c 里 (Model::getLogicViewMode),
+     * 长按编码器上的开关切模式之后由 Presenter 调到这里。所以这里只摆图, 不
+     * 反推状态 —— 和 toggleButton1 一样, 以 Model 为准。
+     *
+     * 会被调到的时机: 长按 (Presenter::encoderLongPressed) 和点这个开关
+     * (Presenter::toggleLogicViewMode) —— 后者顺带把图也摆一次, 所以两种来源
+     * 走的是同一条路, 状态和图不会脱节。
+     */
+    void updateLogicViewMode(uint32_t mode);
+
 protected:
     /* 波形就画在这里面, 盖在 8 个通道框的地盘上。
      *
@@ -108,6 +121,18 @@ protected:
      */
     touchgfx::Callback<LogicView, const touchgfx::AbstractButton&> runCallback;
     void runCallbackHandler(const touchgfx::AbstractButton& src);
+
+    /**
+     * 右下角那个视图模式开关 (toggleButton2) 的回调。
+     *
+     * 和 runCallback 同样的理由自己拿一份, 不去碰 generated 的 buttonCallback
+     * (Designer 里也没给 toggleButton2 配 interaction, 两边不打架)。
+     *
+     * 它不只是个指示灯 —— 点它照样能切模式, 和长按编码器上的开关等效。一个摆在
+     * 那儿的开关点着没反应才奇怪。
+     */
+    touchgfx::Callback<LogicView, const touchgfx::AbstractButton&> modeCallback;
+    void modeCallbackHandler(const touchgfx::AbstractButton& src);
 };
 
 #endif // LOGICVIEW_HPP

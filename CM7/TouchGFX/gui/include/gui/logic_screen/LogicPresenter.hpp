@@ -56,13 +56,37 @@ public:
                               uint32_t ncols);
 
     /**
-     * 编码器转过了 (来自 ModelListener)。在这一屏上它的意思是"调时基":
-     * 顺时针放大, 逆时针缩小, delta 是净格数。
+     * 编码器转过了 (来自 ModelListener)。delta 是净格数, 正 = 顺时针。
+     *
+     * 转一下是"调时基"还是"滚窗口"取决于**当前视图模式** —— 那个判断在
+     * logic_trace.c 里 (它有采样序号, 是判断的原料), 这一层不掺和, 只转交。
      *
      * 只在这一屏被覆盖 —— 别的屏拿到的是默认空实现, 转动直接丢掉。切屏由
      * MVPApplication 负责重新 bind, 所以不用自己判"现在是不是这一屏"。
      */
     virtual void encoderTurned(int16_t delta);
+
+    /**
+     * 编码器上那个开关被长按了 (来自 ModelListener): 切视图模式。
+     * 长按和"点右下角那个开关"走的是同一个 toggleLogicViewMode()。
+     */
+    virtual void encoderLongPressed();
+
+    /**
+     * 在"调时基"和"滚窗口"之间切, 然后把右下角那个开关的图摆到对应的一面。
+     *
+     * 图是 View 的事 (它才有那个控件), 状态在 logic_trace.c 里 —— 这里把两件
+     * 事串起来, 免得两个调用点各摆一次、漏一个。View 的回调 (点开关) 和
+     * encoderLongPressed() (长按) 都走这一个入口。
+     */
+    void toggleLogicViewMode();
+
+    /**
+     * 当前视图模式 (LOG_VIEW_TIMEBASE / LOG_VIEW_SCROLL)。View 用它决定进界面
+     * 时把右下角那个开关摆到哪一面 —— 和 toggleButton1 一样: 以 Model 为准,
+     * 不读开关当前显示的是哪一面。
+     */
+    uint32_t getLogicViewMode();
 
 private:
     LogicPresenter();
