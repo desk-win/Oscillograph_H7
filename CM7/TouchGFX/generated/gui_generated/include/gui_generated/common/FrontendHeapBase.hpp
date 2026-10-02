@@ -24,6 +24,8 @@
 #include <gui/logic_data_screen/Logic_DataPresenter.hpp>
 #include <gui/osc_setting_screen/OSC_SettingView.hpp>
 #include <gui/osc_setting_screen/OSC_SettingPresenter.hpp>
+#include <gui/logic_setting_screen/Logic_SettingView.hpp>
+#include <gui/logic_setting_screen/Logic_SettingPresenter.hpp>
 
 
 /**
@@ -51,7 +53,8 @@ public:
             touchgfx::meta::TypeList< LogicView,
             touchgfx::meta::TypeList< Logic_DataView,
             touchgfx::meta::TypeList< OSC_SettingView,
-            touchgfx::meta::Nil > > > >
+            touchgfx::meta::TypeList< Logic_SettingView,
+            touchgfx::meta::Nil > > > > >
             > GeneratedViewTypes;
 
     /**
@@ -68,7 +71,8 @@ public:
             touchgfx::meta::TypeList< LogicPresenter,
             touchgfx::meta::TypeList< Logic_DataPresenter,
             touchgfx::meta::TypeList< OSC_SettingPresenter,
-            touchgfx::meta::Nil > > > >
+            touchgfx::meta::TypeList< Logic_SettingPresenter,
+            touchgfx::meta::Nil > > > > >
             > GeneratedPresenterTypes;
 
     /**

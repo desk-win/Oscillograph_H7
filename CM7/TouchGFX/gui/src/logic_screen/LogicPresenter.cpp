@@ -58,7 +58,7 @@ void LogicPresenter::encoderLongPressed()
 
 void LogicPresenter::toggleLogicViewMode()
 {
-    /* 先切状态, 再按新状态摆图 —— 顺序反过来就是照旧状态摆, 白摆一次。 */
+    /* 先切状态, 再按新状态写字 —— 顺序反过来就是照旧模式写, 白写一次。 */
     model->toggleLogicViewMode();
     view.updateLogicViewMode(model->getLogicViewMode());
 }

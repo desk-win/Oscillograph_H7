@@ -27,7 +27,8 @@
  * 探针本身不在这里实现, 这里只负责在正确的时刻取值。
  * ========================================================================= */
 
-Model::Model() : modelListener(0), tickDiv(0), logicNcols(0)
+Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
+                 logicProtoMode(LOG_PROTO_UART)
 {
     OSC_Probe_Init();
 
@@ -43,6 +44,17 @@ Model::Model() : modelListener(0), tickDiv(0), logicNcols(0)
     {
         logicLevel[i]  = 0;
         logicChange[i] = 0;
+    }
+
+    /* 协议配置的取值全给 0 —— 也就是说每种协议开机都用候选值列表里第一个:
+     * 9600 / 1 停止位 / 7 位数据 / 无校验 / CPOL=1 / CPHA=1 / CS=high / 125k。
+     * 那份候选值列表在设置屏的 .cpp 里, 想看全貌去那儿。 */
+    for (uint32_t m = 0; m < LOG_PROTO_COUNT; m++)
+    {
+        for (uint32_t r = 0; r < LOG_PROTO_CFG_ROWS; r++)
+        {
+            logicCfgVal[m][r] = 0u;
+        }
     }
 }
 
@@ -86,6 +98,25 @@ void Model::toggleLogicViewMode()
 uint32_t Model::getLogicViewMode() const
 {
     return LOG_Trace_GetViewMode();
+}
+
+uint8_t Model::getLogicCfgValue(uint32_t mode, uint32_t row) const
+{
+    /* 越界返回 0 —— 调用方是设置屏, 正常情况下不会越界, 这里只是不让它读到数组外。 */
+    if (mode >= LOG_PROTO_COUNT || row >= LOG_PROTO_CFG_ROWS)
+    {
+        return 0u;
+    }
+    return logicCfgVal[mode][row];
+}
+
+void Model::setLogicCfgValue(uint32_t mode, uint32_t row, uint8_t value)
+{
+    if (mode >= LOG_PROTO_COUNT || row >= LOG_PROTO_CFG_ROWS)
+    {
+        return;
+    }
+    logicCfgVal[mode][row] = value;
 }
 
 void Model::clearLogicData()

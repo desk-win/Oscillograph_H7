@@ -2,6 +2,7 @@
 #include <touchgfx/Color.hpp>
 #include <touchgfx/hal/HAL.hpp>
 #include <platform/driver/lcd/LCD16bpp.hpp>
+#include <texts/TextKeysAndLanguages.hpp>   /* T_MODEADJUST / T_MODESCROLL */
 #include "sharedconfig.h"
 
 /* 下面按 uint16_t 一个像素直接往显存里写, 所以显存必须是 RGB565。改了
@@ -149,7 +150,7 @@ void LogicTraceWidget::draw(const touchgfx::Rect& invalidatedArea) const
 
 LogicView::LogicView()
     : runCallback(this, &LogicView::runCallbackHandler),
-      modeCallback(this, &LogicView::modeCallbackHandler)
+      lastRunState(false)
 {
     /* 波形控件摆成 (96, 0, 520, 462) —— x 从 96 起 (和 Designer 里那 8 条 Line
      * 的左端对齐) 宽 520 到 616, y 从 0 起高 462 (最后一个框的底边是
@@ -174,16 +175,19 @@ void LogicView::setupScreen()
      * 这个界面不会自动停采集, 从 start_screen 切回来的时候 Model 可能还在跑。
      *
      * 读 Model 而不是指望开关自己的显示: ToggleButton 没有独立的状态位, 它的
-     * 状态就是"现在显示的是哪张图"。 */
-    toggleButton1.forceState(presenter->isLogicRunning());
+     * 状态就是"现在显示的是哪张图"。
+     *
+     * 这里连着 lastRunState 一起写: 那个值是"上一次对齐过的状态", 进界面就是一次
+     * 对齐, 不更新的话 syncRunSwitch() 会拿一个过期的值去比。 */
+    lastRunState = presenter->isLogicRunning();
+    toggleButton1.forceState(lastRunState);
 
-    /* 右下角那个视图模式开关 (toggleButton2): 接上回调 + 按 Model 摆一次。
+    /* 右下角那块文字区 (textArea10) 按 Model 摆一次。
      *
      * 摆一次是必须的 —— 长按编码器上的开关也能切模式, 而**切屏不会改模式**
-     * (状态在 logic_trace.c 里, 不跟界面走), 所以从别的屏切过来时, 开关显示的
-     * 那一面可能已经和实际模式对不上了。和 toggleButton1 一样以 Model 为准,
-     * 不读它现在显示的是哪一面。 */
-    toggleButton2.setAction(modeCallback);
+     * (状态在 logic_trace.c 里, 不跟界面走), 所以从别的屏切过来时, 文字可能已经
+     * 和实际模式对不上了。和 toggleButton1 一样以 Model 为准, 不去反推现在写的
+     * 是哪两个字。 */
     updateLogicViewMode(presenter->getLogicViewMode());
 
     /* 波形控件也跟着对齐 —— 上一次采集的结果还在 Model 里, 切回来应该照原样
@@ -249,6 +253,35 @@ void LogicView::runCallbackHandler(const touchgfx::AbstractButton& src)
     {
         presenter->startLogicCapture();
     }
+
+    /* 拨的这一下开关自己的图已经被 ToggleButton::handleClickEvent 翻过了, 这里只
+     * 把 lastRunState 跟上, 不再碰图。
+     *
+     * 不补这一句的话, 下一次 syncRunSwitch() 会以为状态变了: 结果一样 (forceState
+     * 是幂等的, 不会把图翻反), 但会白标一次脏。 */
+    lastRunState = presenter->isLogicRunning();
+}
+
+/**
+ * 把右上角那个采集开关对齐到 Model —— 只在状态真的变了的时候碰它。
+ *
+ * 为什么要"变了才碰"、以及不这样做会出什么毛病, 见 LogicView.hpp 里这一段的说明。
+ * 这里补一句 forceState 的脾气: **它只换图、不标脏** —— framework 的
+ * ToggleButton.cpp 里就是 up/down 两个赋值, 完了没有 invalidate。所以真动手的时
+ * 候得自己补一次 invalidate, 不然这次对齐要等下一次别的原因把那块盖到才显形,
+ * 用户看到的就是"开关过一会儿才跳一下", 而不是当场翻过去。
+ */
+void LogicView::syncRunSwitch()
+{
+    const bool running = presenter->isLogicRunning();
+    if (running == lastRunState)
+    {
+        return;
+    }
+
+    lastRunState = running;
+    toggleButton1.forceState(running);
+    toggleButton1.invalidate();
 }
 
 void LogicView::updateLogic(const uint16_t* level, const uint16_t* change,
@@ -256,39 +289,33 @@ void LogicView::updateLogic(const uint16_t* level, const uint16_t* change,
 {
     traceWidget.setData(level, change, ncols);
 
-    /* 顺手把开关拨回 OFF。
+    /* 顺手把开关拨回 OFF —— 但只在它真的该动的时候动, 见 syncRunSwitch()。
      *
-     * 这个回调只在"一屏采完了"的时候来 —— 而采完只可能是记录满或者空闲超时
-     * 自动停的 (手动停不会出图)。这时候 Model 那边已经不跑了, 可开关还停在
-     * 用户拨上去的那一面, 看着像还在采。这里对齐一次。
+     * 这个回调常被调到的场合是"一屏采完了": 而采完只可能是记录满或者空闲超时
+     * 自动停的 (手动停不会出图)。那时候 Model 那边已经不跑了, 可开关还停在用户
+     * 拨上去的那一面, 看着像还在采。
      *
-     * 读 Model 而不是无条件 forceState(false): 万一哪天真加上了"采完自动接着
-     * 采", 这里也不会把开关拨错。 */
-    toggleButton1.forceState(presenter->isLogicRunning());
+     * 但它**不止在那时候来**: 转编码器缩放 / 滚动也是重新归约出一屏, 也走这条路
+     * 回来。所以这里不能无条件 forceState —— 那正是"编码器一动, 右上角开关跟着
+     * 跳"的来源。 */
+    syncRunSwitch();
 }
 
 void LogicView::updateLogicViewMode(uint32_t mode)
 {
-    /* 开关的 ON 面 = 滚动查看模式。
+    /* 字取自 texts.xml 里那两条 (T_MODEADJUST / T_MODESCROLL), 不在代码里拼字面
+     * 量: 字形是生成器按 texts.xml 收进字体里的, 代码里自己写 "adjust" 的话, 哪天
+     * 改了字而字体没跟着重新生成, 缺的那个字母在屏上就是空白 —— 那种事在板子上很
+     * 难看出是字体的问题。
      *
-     * forceState 而不是靠 handleClickEvent 那一下翻图: 这条路上来的调用有两个
-     * 来源 —— 长按编码器上的开关 (图根本没被点过), 和点这个开关 (图已经被
-     * ToggleButton 自己翻过了)。forceState 对两边都成立, 而且和实际状态对齐,
-     * 所以两个来源走同一条路。 */
-    toggleButton2.forceState(mode == LOG_VIEW_SCROLL);
-}
+     * 填的是 textArea10Buffer (ViewBase 里 setWildcard 接好了的那片), 控件上那个
+     * TypedText 是 "<>" 通配模板 —— 文本转换器把它换成了 0x02, 运行时再由这片缓冲
+     * 区替换掉。所以这里只填缓冲区, 不动 TypedText。 */
+    const touchgfx::Unicode::UnicodeChar* txt =
+        touchgfx::TypedText((mode == LOG_VIEW_SCROLL) ? T_MODESCROLL : T_MODEADJUST).getText();
 
-void LogicView::modeCallbackHandler(const touchgfx::AbstractButton& src)
-{
-    if (&src != &toggleButton2)
-    {
-        return;
-    }
+    touchgfx::Unicode::strncpy(textArea10Buffer, txt, TEXTAREA10_SIZE);
 
-    /* 只认 Model, 不读开关当前是哪一面 —— 和 toggleButton1 一个道理。
-     *
-     * ToggleButton::handleClickEvent 是先换图再调 action 的, 所以这一下之后
-     * 开关显示的那一面正好就是新模式; 而且 Presenter 那边切完状态会回调
-     * updateLogicViewMode() 再摆一次 (幂等), 两条路都指向同一个结果。 */
-    presenter->toggleLogicViewMode();
+    /* 换了字不标脏的话, 这一块要等下一次别的原因重画到才更新。 */
+    textArea10.invalidate();
 }

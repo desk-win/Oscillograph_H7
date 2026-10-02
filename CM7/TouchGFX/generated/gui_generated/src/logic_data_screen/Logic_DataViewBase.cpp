@@ -32,6 +32,10 @@ Logic_DataViewBase::Logic_DataViewBase() :
     save.setLabelColorPressed(touchgfx::Color::getColorFromRGB(255, 255, 255));
     save.setAction(buttonCallback);
     add(save);
+
+    box2.setPosition(0, 91, 800, 389);
+    box2.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    add(box2);
 }
 
 Logic_DataViewBase::~Logic_DataViewBase()

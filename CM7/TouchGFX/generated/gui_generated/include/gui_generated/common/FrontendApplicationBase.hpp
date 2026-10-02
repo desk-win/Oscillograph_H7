@@ -37,6 +37,9 @@ public:
     // OSC_Setting
     void gotoOSC_SettingScreenSlideTransitionEast();
 
+    // Logic_Setting
+    void gotoLogic_SettingScreenSlideTransitionEast();
+
 protected:
     touchgfx::Callback<FrontendApplicationBase> transitionCallback;
     FrontendHeap& frontendHeap;
@@ -58,6 +61,9 @@ protected:
 
     // OSC_Setting
     void gotoOSC_SettingScreenSlideTransitionEastImpl();
+
+    // Logic_Setting
+    void gotoLogic_SettingScreenSlideTransitionEastImpl();
 };
 
 #endif // FRONTENDAPPLICATIONBASE_HPP

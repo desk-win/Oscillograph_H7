@@ -89,15 +89,19 @@ public:
     void updateLogic(const uint16_t* level, const uint16_t* change, uint32_t ncols);
 
     /**
-     * 视图模式变了 —— 把右下角那个开关 (toggleButton2) 摆到对应的一面。
+     * 视图模式变了 —— 把右下角那块文字区 (textArea10) 改成对应的字。
      *
      * 它是个**指示器**: 真正的状态在 logic_trace.c 里 (Model::getLogicViewMode),
-     * 长按编码器上的开关切模式之后由 Presenter 调到这里。所以这里只摆图, 不
-     * 反推状态 —— 和 toggleButton1 一样, 以 Model 为准。
+     * 长按编码器上的开关切模式之后由 Presenter 调到这里。所以这里只写字, 不反推
+     * 状态 —— 和 toggleButton1 一样, 以 Model 为准。
      *
-     * 会被调到的时机: 长按 (Presenter::encoderLongPressed) 和点这个开关
-     * (Presenter::toggleLogicViewMode) —— 后者顺带把图也摆一次, 所以两种来源
-     * 走的是同一条路, 状态和图不会脱节。
+     * 原来这里是个 ToggleButton (靠翻图表示两个模式), 现在换成文字区: 翻图看不
+     * 出哪一面是哪个模式, 而 adjust / scroll 一眼就懂。代价是文字区不可点, 切模
+     * 式只剩长按这一条路。
+     *
+     * 会被调到的时机: 进界面时摆一次 (setupScreen) 和长按之后
+     * (Presenter::encoderLongPressed → toggleLogicViewMode)。两条路都走这里, 所
+     * 以没有第二处写字。
      */
     void updateLogicViewMode(uint32_t mode);
 
@@ -123,16 +127,30 @@ protected:
     void runCallbackHandler(const touchgfx::AbstractButton& src);
 
     /**
-     * 右下角那个视图模式开关 (toggleButton2) 的回调。
+     * 把右上角那个采集开关对齐到 Model —— **只在状态真的变了的时候碰它**。
      *
-     * 和 runCallback 同样的理由自己拿一份, 不去碰 generated 的 buttonCallback
-     * (Designer 里也没给 toggleButton2 配 interaction, 两边不打架)。
+     * 为什么要"变了才碰": 这个函数挂在 updateLogic 上, 而 updateLogic 现在**每转
+     * 一格编码器都会来一次** —— 缩放和滚动都是重新归约出一屏, 走
+     * logicUpdated → view.updateLogic 回来。原来那里是无条件 forceState 的, 等于
+     * 把"转编码器"和"右上角那个开关"绑在了一起。而 ToggleButton::forceState() 是
+     * **只换图、不标脏**的 (framework 里就是这么写的, 见 ToggleButton.cpp), 换完图
+     * 屏幕不会自己重画, 要等下一次别的原因正好把那一块盖到才显形, 所以表现出来就
+     * 是"编码器一动, 右上角那个开关跟着跳"。状态没变就干脆别碰它, 这条链就断了。
      *
-     * 它不只是个指示灯 —— 点它照样能切模式, 和长按编码器上的开关等效。一个摆在
-     * 那儿的开关点着没反应才奇怪。
+     * 真正需要它动手的只有一处: 采集因为记录满 / 空闲超时而自己停下 (见
+     * updateLogic)。那时候 Model 已经不跑了, 开关却还停在用户拨上去的那一面, 得
+     * 把它拨回来 —— 那种情况下状态确实变了, 所以这里会真的动手。
      */
-    touchgfx::Callback<LogicView, const touchgfx::AbstractButton&> modeCallback;
-    void modeCallbackHandler(const touchgfx::AbstractButton& src);
+    void syncRunSwitch();
+
+    /**
+     * 上一次对齐过的采集状态。用来判断"变了没有"。
+     *
+     * 它和开关当前显示的那一面始终是一致的: 会写这个值的地方只有 setupScreen
+     * (进界面时按 Model 摆一次)、runCallbackHandler (用户拨开关) 和 syncRunSwitch
+     * 自己 —— 三条路都同时把开关的图摆成该有的样子, 没有第四条路会偷偷改图。
+     */
+    bool lastRunState;
 };
 
 #endif // LOGICVIEW_HPP

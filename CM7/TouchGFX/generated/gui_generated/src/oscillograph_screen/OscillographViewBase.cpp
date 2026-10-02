@@ -131,6 +131,51 @@ OscillographViewBase::OscillographViewBase() :
     setting.setLabelColorPressed(touchgfx::Color::getColorFromRGB(255, 255, 255));
     setting.setAction(buttonCallback);
     add(setting);
+
+    ch1frequency.setXY(688, 181);
+    ch1frequency.setColor(touchgfx::Color::getColorFromRGB(24, 200, 219));
+    ch1frequency.setLinespacing(0);
+    ch1frequencyBuffer[0] = 0;
+    ch1frequency.setWildcard(ch1frequencyBuffer);
+    ch1frequency.resizeToCurrentText();
+    ch1frequency.setTypedText(touchgfx::TypedText(T___SINGLEUSE_PS3S));
+    add(ch1frequency);
+
+    ch2vpp.setXY(687, 312);
+    ch2vpp.setColor(touchgfx::Color::getColorFromRGB(212, 180, 19));
+    ch2vpp.setLinespacing(0);
+    ch2vppBuffer[0] = 0;
+    ch2vpp.setWildcard(ch2vppBuffer);
+    ch2vpp.resizeToCurrentText();
+    ch2vpp.setTypedText(touchgfx::TypedText(T___SINGLEUSE_6JZK));
+    add(ch2vpp);
+
+    ch2frequency.setXY(688, 368);
+    ch2frequency.setColor(touchgfx::Color::getColorFromRGB(212, 180, 19));
+    ch2frequency.setLinespacing(0);
+    ch2frequencyBuffer[0] = 0;
+    ch2frequency.setWildcard(ch2frequencyBuffer);
+    ch2frequency.resizeToCurrentText();
+    ch2frequency.setTypedText(touchgfx::TypedText(T___SINGLEUSE_QLWX));
+    add(ch2frequency);
+
+    ch1vpp.setXY(688, 130);
+    ch1vpp.setColor(touchgfx::Color::getColorFromRGB(24, 200, 219));
+    ch1vpp.setLinespacing(0);
+    ch1vppBuffer[0] = 0;
+    ch1vpp.setWildcard(ch1vppBuffer);
+    ch1vpp.resizeToCurrentText();
+    ch1vpp.setTypedText(touchgfx::TypedText(T___SINGLEUSE_DII0));
+    add(ch1vpp);
+
+    phase.setXY(50, 446);
+    phase.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
+    phase.setLinespacing(0);
+    phaseBuffer[0] = 0;
+    phase.setWildcard(phaseBuffer);
+    phase.resizeToCurrentText();
+    phase.setTypedText(touchgfx::TypedText(T___SINGLEUSE_MVEX));
+    add(phase);
 }
 
 OscillographViewBase::~OscillographViewBase()

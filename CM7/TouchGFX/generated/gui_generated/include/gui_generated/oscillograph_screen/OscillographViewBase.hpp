@@ -15,6 +15,7 @@
 #include <touchgfx/widgets/ToggleButton.hpp>
 #include <touchgfx/widgets/BoxWithBorder.hpp>
 #include <touchgfx/widgets/ButtonWithLabel.hpp>
+#include <touchgfx/widgets/TextAreaWithWildcard.hpp>
 
 class OscillographViewBase : public touchgfx::View<OscillographPresenter>
 {
@@ -55,6 +56,25 @@ protected:
     touchgfx::TextArea textArea4;
     touchgfx::TextArea textArea5;
     touchgfx::ButtonWithLabel setting;
+    touchgfx::TextAreaWithOneWildcard ch1frequency;
+    touchgfx::TextAreaWithOneWildcard ch2vpp;
+    touchgfx::TextAreaWithOneWildcard ch2frequency;
+    touchgfx::TextAreaWithOneWildcard ch1vpp;
+    touchgfx::TextAreaWithOneWildcard phase;
+
+    /*
+     * Wildcard Buffers
+     */
+    static const uint16_t CH1FREQUENCY_SIZE = 20;
+    touchgfx::Unicode::UnicodeChar ch1frequencyBuffer[CH1FREQUENCY_SIZE];
+    static const uint16_t CH2VPP_SIZE = 20;
+    touchgfx::Unicode::UnicodeChar ch2vppBuffer[CH2VPP_SIZE];
+    static const uint16_t CH2FREQUENCY_SIZE = 20;
+    touchgfx::Unicode::UnicodeChar ch2frequencyBuffer[CH2FREQUENCY_SIZE];
+    static const uint16_t CH1VPP_SIZE = 20;
+    touchgfx::Unicode::UnicodeChar ch1vppBuffer[CH1VPP_SIZE];
+    static const uint16_t PHASE_SIZE = 20;
+    touchgfx::Unicode::UnicodeChar phaseBuffer[PHASE_SIZE];
 
 private:
 

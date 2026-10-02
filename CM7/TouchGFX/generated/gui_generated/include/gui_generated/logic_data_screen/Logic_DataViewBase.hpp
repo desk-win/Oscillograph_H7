@@ -29,6 +29,7 @@ protected:
     touchgfx::Box box1;
     touchgfx::ButtonWithLabel cancel;
     touchgfx::ButtonWithLabel save;
+    touchgfx::Box box2;
 
 private:
 

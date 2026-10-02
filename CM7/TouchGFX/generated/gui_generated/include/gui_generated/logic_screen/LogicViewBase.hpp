@@ -14,6 +14,7 @@
 #include <touchgfx/widgets/TextArea.hpp>
 #include <touchgfx/widgets/ButtonWithLabel.hpp>
 #include <touchgfx/widgets/ToggleButton.hpp>
+#include <touchgfx/widgets/TextAreaWithWildcard.hpp>
 
 class LogicViewBase : public touchgfx::View<LogicPresenter>
 {
@@ -34,7 +35,7 @@ protected:
     touchgfx::Box box1;
     touchgfx::Line line2_1;
     touchgfx::PainterRGB565 line2_1Painter;
-    touchgfx::Button button1;
+    touchgfx::Button Back;
     touchgfx::TextArea textArea1;
     touchgfx::TextArea textArea2;
     touchgfx::TextArea textArea3;
@@ -60,9 +61,16 @@ protected:
     touchgfx::PainterRGB565 line7Painter;
     touchgfx::Line line8;
     touchgfx::PainterRGB565 line8Painter;
-    touchgfx::ButtonWithLabel Setting;
+    touchgfx::ButtonWithLabel Data;
     touchgfx::ToggleButton toggleButton1;
-    touchgfx::ToggleButton toggleButton2;
+    touchgfx::ButtonWithLabel Setting;
+    touchgfx::TextAreaWithOneWildcard textArea10;
+
+    /*
+     * Wildcard Buffers
+     */
+    static const uint16_t TEXTAREA10_SIZE = 20;
+    touchgfx::Unicode::UnicodeChar textArea10Buffer[TEXTAREA10_SIZE];
 
 private:
 

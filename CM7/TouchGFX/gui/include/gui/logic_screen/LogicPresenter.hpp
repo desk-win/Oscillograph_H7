@@ -68,23 +68,25 @@ public:
 
     /**
      * 编码器上那个开关被长按了 (来自 ModelListener): 切视图模式。
-     * 长按和"点右下角那个开关"走的是同一个 toggleLogicViewMode()。
+     *
+     * 长按是切模式的**唯一**入口: 右下角那个指示器现在是一块文字区, 点不动。
      */
     virtual void encoderLongPressed();
 
     /**
-     * 在"调时基"和"滚窗口"之间切, 然后把右下角那个开关的图摆到对应的一面。
+     * 在"调时基"和"滚窗口"之间切, 然后把右下角那块文字区改成对应的字。
      *
-     * 图是 View 的事 (它才有那个控件), 状态在 logic_trace.c 里 —— 这里把两件
-     * 事串起来, 免得两个调用点各摆一次、漏一个。View 的回调 (点开关) 和
-     * encoderLongPressed() (长按) 都走这一个入口。
+     * 写字是 View 的事 (它才有那个控件), 状态在 logic_trace.c 里 —— 这里把两件事
+     * 串起来, 免得两个调用点各写一次、漏一个。现在只剩 encoderLongPressed() 一个
+     * 调用点, 但还是收在这一个入口里 —— 以后要加第二个入口 (比如某个设置项) 时
+     * 不用再去想"还有哪几处要摆"。
      */
     void toggleLogicViewMode();
 
     /**
      * 当前视图模式 (LOG_VIEW_TIMEBASE / LOG_VIEW_SCROLL)。View 用它决定进界面
-     * 时把右下角那个开关摆到哪一面 —— 和 toggleButton1 一样: 以 Model 为准,
-     * 不读开关当前显示的是哪一面。
+     * 时那块文字区该写哪两个字 —— 和 toggleButton1 一样: 以 Model 为准, 不去反推
+     * 现在写的是哪两个字。
      */
     uint32_t getLogicViewMode();
 

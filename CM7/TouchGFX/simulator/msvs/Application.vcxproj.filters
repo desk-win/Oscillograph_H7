@@ -232,6 +232,18 @@
     <Filter Include="Source Files\generated\gui_generated\logic_data_screen">
       <UniqueIdentifier>F29514C3-F04A-1480-94EE-21EFA04F16E9</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\gui\logic_setting_screen">
+      <UniqueIdentifier>9C73B0A8-3FA1-2256-3C59-0CFEA7D9FCFF</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\gui\logic_setting_screen">
+      <UniqueIdentifier>A13986EC-A96C-4D94-6324-2988C773C83C</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\generated\gui_generated\logic_setting_screen">
+      <UniqueIdentifier>4C59C077-F31A-65DC-9B0C-5FC65415A248</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\generated\gui_generated\logic_setting_screen">
+      <UniqueIdentifier>E7FA93BA-3DB0-9291-53E4-33F6CB04D78D</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(TouchGFXReleasePath)\framework\source\platform\driver\touch\SDL2TouchController.cpp">
@@ -308,6 +320,15 @@
     </ClCompile>
     <ClCompile Include="..\..\generated\gui_generated\src\logic_data_screen\Logic_DataViewBase.cpp">
       <Filter>Source Files\generated\gui_generated\logic_data_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\gui\src\logic_setting_screen\Logic_SettingPresenter.cpp">
+      <Filter>Source Files\gui\logic_setting_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\gui\src\logic_setting_screen\Logic_SettingView.cpp">
+      <Filter>Source Files\gui\logic_setting_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\generated\gui_generated\src\logic_setting_screen\Logic_SettingViewBase.cpp">
+      <Filter>Source Files\generated\gui_generated\logic_setting_screen</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -795,6 +816,15 @@
     </ClInclude>
     <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\logic_data_screen\Logic_DataViewBase.hpp">
       <Filter>Header Files\generated\gui_generated\logic_data_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\gui\include\gui\logic_setting_screen\Logic_SettingPresenter.hpp">
+      <Filter>Header Files\gui\logic_setting_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\gui\include\gui\logic_setting_screen\Logic_SettingView.hpp">
+      <Filter>Header Files\gui\logic_setting_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\logic_setting_screen\Logic_SettingViewBase.hpp">
+      <Filter>Header Files\generated\gui_generated\logic_setting_screen</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

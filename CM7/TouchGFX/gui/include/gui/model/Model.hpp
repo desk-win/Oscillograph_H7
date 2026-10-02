@@ -7,6 +7,34 @@
 
 class ModelListener;
 
+/**
+ * 逻辑分析仪采的是哪种协议的数据线 —— Logic_Setting 屏上那个 Mode。
+ *
+ * 顺序就是 mode_switch 按键的轮询顺序 (UART → I2C → SPI → CAN → 回到 UART,
+ * 见 Logic_SettingPresenter::nextLogicProtoMode), 所以这里改顺序 = 改按键顺序。
+ * 默认 UART, 见 Model::Model()。
+ *
+ * 为什么放在 GUI 这一侧、而不是像视图模式那样放进 logic_trace.c: 现在它只决定
+ * 设置屏上写哪几个字, 采集和归约都还用不到它。等解码器真的要按它分派时, 该和
+ * 视图模式一样挪到 logic_trace.c —— 那边才是 CM7 侧逻辑分析仪状态的落脚点,
+ * 也是唯一能把它发给 CM4 的地方。
+ */
+enum LogicProtoMode
+{
+    LOG_PROTO_UART = 0,
+    LOG_PROTO_I2C,
+    LOG_PROTO_SPI,
+    LOG_PROTO_CAN,
+    LOG_PROTO_COUNT
+};
+
+/* 每个协议最多显示几行可配置项 —— 就是设置屏 box2 里那几个 setting 文字区。
+ *
+ * 这个数改不动屏上的控件 (那几个是 Designer 放的), 所以设置屏里有一条 static_assert
+ * 把它和控件个数钉在一起: Designer 里加了第五个 setting, 那边会编译不过, 而不是
+ * 悄悄少显示一行。 */
+#define LOG_PROTO_CFG_ROWS  4
+
 class Model
 {
 public:
@@ -109,6 +137,39 @@ public:
     /** 当前视图模式 (LOG_VIEW_TIMEBASE / LOG_VIEW_SCROLL)。 */
     uint32_t getLogicViewMode() const;
 
+    /* ---- 逻辑分析仪的协议模式 (Logic_Setting 屏上的 Mode) ---- */
+
+    /** 当前协议模式 (LOG_PROTO_*)。 */
+    uint32_t getLogicProtoMode() const
+    {
+        return logicProtoMode;
+    }
+
+    /**
+     * 换一个协议模式。越界由调用方保证 —— 设置屏那条路是按 LOG_PROTO_COUNT
+     * 取模轮询过来的。
+     */
+    void setLogicProtoMode(uint32_t mode)
+    {
+        logicProtoMode = mode;
+    }
+
+    /* ---- 协议配置的取值 (设置屏 box2 里那几行) ---- */
+
+    /**
+     * 第 mode 个模式的第 row 行, 选的是候选值里的第几个 (0 = 列表里第一个)。
+     *
+     * 存的是**下标**, 不是 9600 那种真值: 候选值表在设置屏那边 (它本来就要拿文本 id
+     * 去写字), 这里只当一个不透明的格子记着。以后解码器要真值时, 在那边表里加一列
+     * raw, 再写一个 Model → logic_trace.c 的桥把它翻过去 —— 现在没人要, 不提前做。
+     *
+     * 越界的 mode/row 都返回 0, 不会读到数组外。
+     */
+    uint8_t getLogicCfgValue(uint32_t mode, uint32_t row) const;
+
+    /** 同上, 写。越界直接丢掉。 */
+    void setLogicCfgValue(uint32_t mode, uint32_t row, uint8_t value);
+
 protected:
     ModelListener* modelListener;
 
@@ -126,6 +187,15 @@ protected:
     uint16_t logicLevel[LOG_TRACE_COLS];
     uint16_t logicChange[LOG_TRACE_COLS];
     uint32_t logicNcols;
+
+    /* 设置屏上选的协议模式 (LOG_PROTO_*)。放这儿而不是逻辑屏的 View 里, 是因为
+     * 它得活过切屏 —— Save/Cancel 都会离开这一屏, 再进来时要还是上次选的
+     * 那个。开机默认 UART, 见构造函数。 */
+    uint32_t logicProtoMode;
+
+    /* [模式][第几行] = 选了第几个候选值。全 0 是开机默认值, 也就是每种协议都用
+     * 候选值列表里第一个 (9600 / 1 停止位 / 7 位数据 / 无校验 / CPOL=1 ...)。 */
+    uint8_t logicCfgVal[LOG_PROTO_COUNT][LOG_PROTO_CFG_ROWS];
 };
 
 #endif // MODEL_HPP

@@ -6,6 +6,210 @@
   <Texts>
     <TextGroup Id="Group1" />
     <TextGroup Id="Unsorted">
+      <Text Id="__SingleUse_MVEX" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_DII0" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_QLWX" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_6JZK" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_PS3S" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_3JVL" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;    &lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_TX12" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;    &lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_BTHG" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;    &lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_9LQN" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;    &lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_14RU" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="modeAdjust" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">adjust</Translation>
+      </Text>
+      <Text Id="modeScroll" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">scroll</Translation>
+      </Text>
+      <Text Id="protoUart" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">UART</Translation>
+      </Text>
+      <Text Id="protoI2c" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">I2C</Translation>
+      </Text>
+      <Text Id="protoSpi" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">SPI</Translation>
+      </Text>
+      <Text Id="protoCan" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CAN</Translation>
+      </Text>
+      <Text Id="sigRx" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">RX</Translation>
+      </Text>
+      <Text Id="sigScl" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">SCL</Translation>
+      </Text>
+      <Text Id="sigSda" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">SDA</Translation>
+      </Text>
+      <Text Id="sigCs" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CS</Translation>
+      </Text>
+      <Text Id="sigSck" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">SCK</Translation>
+      </Text>
+      <Text Id="sigMiso" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">MISO</Translation>
+      </Text>
+      <Text Id="sigMosi" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">MOSI</Translation>
+      </Text>
+      <Text Id="optBaud" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">baud</Translation>
+      </Text>
+      <Text Id="optStop" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">stop</Translation>
+      </Text>
+      <Text Id="optData" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">data</Translation>
+      </Text>
+      <Text Id="optParity" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">parity</Translation>
+      </Text>
+      <Text Id="optCpol" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CPOL</Translation>
+      </Text>
+      <Text Id="optCpha" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CPHA</Translation>
+      </Text>
+      <Text Id="optCs" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CS</Translation>
+      </Text>
+      <Text Id="val9600" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">9600</Translation>
+      </Text>
+      <Text Id="val38400" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">38400</Translation>
+      </Text>
+      <Text Id="val115200" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">115200</Translation>
+      </Text>
+      <Text Id="val1" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">1</Translation>
+      </Text>
+      <Text Id="val1_5" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">1.5</Translation>
+      </Text>
+      <Text Id="val2" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">2</Translation>
+      </Text>
+      <Text Id="val7" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">7</Translation>
+      </Text>
+      <Text Id="val8" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">8</Translation>
+      </Text>
+      <Text Id="valNone" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">none</Translation>
+      </Text>
+      <Text Id="valOdd" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">odd</Translation>
+      </Text>
+      <Text Id="valEven" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">even</Translation>
+      </Text>
+      <Text Id="val0" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">0</Translation>
+      </Text>
+      <Text Id="valHigh" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">high</Translation>
+      </Text>
+      <Text Id="valLow" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">low</Translation>
+      </Text>
+      <Text Id="val125k" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">125k</Translation>
+      </Text>
+      <Text Id="val250k" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">250k</Translation>
+      </Text>
+      <Text Id="val500k" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">500k</Translation>
+      </Text>
+      <Text Id="__SingleUse_RZFF" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_V01N" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_HJZ5" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_YA8E" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_EPBJ" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_NK67" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_HJ78" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_MFZQ" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_KA0P" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH8: </Translation>
+      </Text>
+      <Text Id="__SingleUse_IK4A" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH7: </Translation>
+      </Text>
+      <Text Id="__SingleUse_09MD" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH6: </Translation>
+      </Text>
+      <Text Id="__SingleUse_BIQH" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH5: </Translation>
+      </Text>
+      <Text Id="__SingleUse_MUB5" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH4: </Translation>
+      </Text>
+      <Text Id="__SingleUse_599M" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH3: </Translation>
+      </Text>
+      <Text Id="__SingleUse_N7VD" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH2: </Translation>
+      </Text>
+      <Text Id="__SingleUse_VZ3Q" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH1: </Translation>
+      </Text>
+      <Text Id="__SingleUse_7PYW" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_AYFE" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">Mode: </Translation>
+      </Text>
+      <Text Id="__SingleUse_PT17" Alignment="Center" TypographyId="Default">
+        <Translation Language="GB">Cancel</Translation>
+      </Text>
+      <Text Id="__SingleUse_LD5J" Alignment="Center" TypographyId="Default">
+        <Translation Language="GB">Save</Translation>
+      </Text>
+      <Text Id="__SingleUse_TM7B" Alignment="Center" TypographyId="Default">
+        <Translation Language="GB">Setting</Translation>
+      </Text>
       <Text Id="__SingleUse_LZHW" Alignment="Center" TypographyId="Default">
         <Translation Language="GB">Save</Translation>
       </Text>
