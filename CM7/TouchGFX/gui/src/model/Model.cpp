@@ -552,14 +552,22 @@ void Model::tick()
     tickDiv = OSC_Trace_RefreshTicks() - 1u;
 
     const uint32_t tBuild = OSC_PROBE_CYC;
+    /* 每一路这一屏的测量结果 (峰峰值 / 频率)。放在这里当局部量: 它只活到下面
+     * 那一次 traceUpdated —— View 是同步把它格式化成文字写进控件的, 不存指针。 */
+    osc_meas_t meas1;
+    osc_meas_t meas2;
 #if OSC_DBG_SKIP_BUILD
-    /* 分半用: 不读 SDRAM, 拿上一屏的旧数据接着往下走, 画图工作量不变 */
+    /* 分半用: 不读 SDRAM, 拿上一屏的旧数据接着往下走, 画图工作量不变。
+     * 测量那两份一起清掉, 让它表现得和"没量到"一样 —— 否则屏幕上会挂着上一帧
+     * 的数字不动, 看不出这条路径根本没读数据。 */
     (void)OSC_Trace_Build;
+    meas1.valid = 0u; meas1.has_freq = 0u; meas1.lo = 0u; meas1.hi = 0u; meas1.freq_mhz = 0u;
+    meas2 = meas1;
     const bool ok1 = true;
     const bool ok2 = true;
 #else
-    const bool ok1 = OSC_Trace_Build(OSC_TRACE_CH1, traceY[0]) != 0;
-    const bool ok2 = OSC_Trace_Build(OSC_TRACE_CH2, traceY[1]) != 0;
+    const bool ok1 = OSC_Trace_Build(OSC_TRACE_CH1, traceY[0], &meas1) != 0;
+    const bool ok2 = OSC_Trace_Build(OSC_TRACE_CH2, traceY[1], &meas2) != 0;
 #endif
     g_dbg_build_cyc = OSC_PROBE_CYC - tBuild;
 
@@ -568,14 +576,18 @@ void Model::tick()
      *
      * 只有一路返回 0 的时候照样要通知, 但把那两个标志一起传下去: 缓冲里那一
      * 路是旧数据, 控件按 fresh 决定不画它。不能靠"整帧不发"来挡 —— 另一路还
-     * 在跑, 这一帧不发会把它的刷新也一起掐掉。 */
+     * 在跑, 这一帧不发会把它的刷新也一起掐掉。
+     *
+     * 测量值跟着一起走 (measN->valid 就是 freshN): View 那边同一个回调里既换
+     * 波形又换数字, 屏幕上的波形和数字因此永远是同一屏的 —— 不会出现"数字是
+     * 这一屏的、波形还在上一屏"。 */
     if ((ok1 || ok2) && modelListener != 0)
     {
 #if OSC_DBG_SKIP_GRAPH
         g_dbg_graph_cyc = 0u;       /* 分半用: 只量抽点, 不画 */
 #else
         const uint32_t tGraph = OSC_PROBE_CYC;
-        modelListener->traceUpdated(traceY[0], traceY[1], ok1, ok2);
+        modelListener->traceUpdated(traceY[0], traceY[1], &meas1, &meas2, ok1, ok2);
         g_dbg_graph_cyc = OSC_PROBE_CYC - tGraph;
 #endif
     }

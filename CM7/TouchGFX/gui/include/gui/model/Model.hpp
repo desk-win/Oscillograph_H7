@@ -118,6 +118,19 @@ public:
     void getOscUiState(osc_ui_state_t* out) const;
 
     /**
+     * 这一路当前的放大档位 (0..OSC_GAIN_STEPS-1, 实际倍数 = 1 << n)。
+     *
+     * 界面把测量出来的**原始计数**换算成电压时要用它: 探头那边先分压了 10 倍,
+     * 放大这一级又乘回去, 不知道乘了多少就算不出探头上的真实电压。
+     *
+     * 越界的 ch 落到 CH1 上 (只可能是 0/1, 这里只是不让它读到数组外)。
+     */
+    uint8_t getOscGain(osc_trace_ch_t ch) const
+    {
+        return (uint8_t)oscGain[(ch == OSC_TRACE_CH2) ? 1u : 0u];
+    }
+
+    /**
      * 把 Model 记得的设置重新推给硬件。**进示波器屏时调一次**。
      *
      * 兜的是"两核各自独立复位"那种情况: CM4 那边 osc_ctrl 里的 cfg_gain_* 可能

@@ -28,12 +28,20 @@ public:
      * 是 false —— 这一路停着, 或者刚 Start、环里还没凑够一屏。这两种时候缓冲
      * 里装的是上一轮的旧数据, 不能往屏幕上画 (画了就是"关掉再打开会先闪一下
      * 关机前那条波形")。控件拿它决定这一帧画哪几路, 见 OscTraceWidget。
+     *
+     * meas1 / meas2: 同一屏量出来的峰峰值和频率 (原始计数, 见 osc_meas_t)。
+     * 和 fresh 是同一件事的两面 —— measN->valid 就是 freshN, 分开传只是为了让
+     * View 那边不用把"画波形"和"填数字"两件事揉在一个标志里。不新的时候
+     * valid 是 0, View 收到就把这一路的数字清空。
      */
     virtual void traceUpdated(const uint16_t* ch1, const uint16_t* ch2,
+                              const osc_meas_t* meas1, const osc_meas_t* meas2,
                               bool fresh1, bool fresh2)
     {
         (void)ch1;
         (void)ch2;
+        (void)meas1;
+        (void)meas2;
         (void)fresh1;
         (void)fresh2;
     }

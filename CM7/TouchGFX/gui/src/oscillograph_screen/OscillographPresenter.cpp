@@ -43,10 +43,16 @@ bool OscillographPresenter::isAcquisitionRunning(osc_trace_ch_t ch)
     return model->isRunning(ch);
 }
 
+uint8_t OscillographPresenter::getOscGain(osc_trace_ch_t ch)
+{
+    return model->getOscGain(ch);
+}
+
 void OscillographPresenter::traceUpdated(const uint16_t* ch1, const uint16_t* ch2,
+                                         const osc_meas_t* meas1, const osc_meas_t* meas2,
                                          bool fresh1, bool fresh2)
 {
-    view.updateTrace(ch1, ch2, fresh1, fresh2);
+    view.updateTrace(ch1, ch2, meas1, meas2, fresh1, fresh2);
 }
 
 /* ===========================================================================

@@ -369,11 +369,144 @@ static int window_start(uint32_t ch, uint32_t *out, uint32_t *out_wpc)
  * 抽点
  * ========================================================================= */
 
-/* CH1: 一个 word 装两个样本 —— 低 16 位是 ADC1 的, 时间在前; 高 16 位是 ADC2
- * 的, 时间在后 (CM4 那边 ADC1/ADC2 多重模式交替采同一个输入)。
- * 所以 W 个 word = 2W 个样本, 只留下 min 和 max。 */
-static void build_ch1(uint32_t start, uint32_t wpc, uint16_t *y)
+/* ---------------------------------------------------------------------------
+ * 过零检测的门限, 每通道一份
+ *
+ * 门限必须在扫之前就定下来, 而幅度中点要扫完才知道 —— 要么扫两遍 (等于把
+ * SDRAM 读翻倍, 这是这个模块里最贵的东西), 要么用**上一屏**量出来的幅度。
+ * 取后者: 波形稳定时两者没有区别, 幅度突变时慢一屏 (50 ms) 跟上, 而幅度突变
+ * 本身在屏幕上也要一屏才看得出来。
+ *
+ * 开机第一屏还没有历史, 用 0V 那个偏置点 (2048) 加一个小小的迟滞兜底。幅度小
+ * 到 64 个计数以内的信号第一屏量不出频率, 第二屏就好了 —— 这条路径只在通道刚
+ * 打开那一瞬间存在。
+ * ------------------------------------------------------------------------- */
+static uint16_t s_thr_mid[2]  = { 2048u, 2048u };
+static uint16_t s_thr_hyst[2] = {   64u,   64u };
+
+/* 迟滞下限: 平直信号上 ±1 LSB 的抖动不该被数成边沿。 */
+#define OSC_MEAS_MIN_HYST  2u
+
+/* 周期至少要占这么多个采样点。
+ *
+ * 4 个点的时候插值还能看 (正弦一波里有 4 个点, 过零那两下前后各有样本可以插);
+ * 再密的东西 (接近奈奎斯特) 插值失真和混叠一起来, 与其显示一个错的数, 不如
+ * 显示 "----"。CH1 采样间隔 160 ns → 上限约 1.56 MHz; CH2 320 ns → 约 780 kHz。 */
+#define OSC_MEAS_MIN_SAMPLES_PER_PERIOD  4u
+
+/* 迟滞宽度: 幅度的 1/8, 但不小于 OSC_MEAS_MIN_HYST。
+ *
+ * 按幅度取而不是取固定值 —— 信号小的时候固定迟滞会把它整个吃掉 (永远不穿越),
+ * 信号大的时候又挡不住噪声。 */
+static uint16_t meas_hyst(uint16_t lo, uint16_t hi)
 {
+    const uint32_t h = ((uint32_t)hi - (uint32_t)lo) / 8u;
+    return (uint16_t)((h < OSC_MEAS_MIN_HYST) ? OSC_MEAS_MIN_HYST : h);
+}
+
+/* 把一个样本喂给过零检测器。
+ *
+ * ── 为什么是宏而不是函数 ──
+ * 它驱动的这套状态**每个样本都要走一遍**, 所以必须留在寄存器里。写成函数的话
+ * 只要编译器没把结构体提升进寄存器, 每个样本就多一次入栈出栈的往返 —— 正好
+ * 把"塞进同一个循环"省下来的那些又还回去。代价是它引用的局部量必须在调用它的
+ * 函数里同名叫出来, 名字统一是 m_ 开头, build_ch1 / build_ch2 各声明一份。
+ *
+ * v  样本值 (0..4095)
+ * tv 这个样本的时刻 (ns, 相对窗口起点)
+ *
+ * 上升沿的判定是迟滞比较: 高于 thr_hi 才算"上", 低于 thr_lo 才算"下", 中间是
+ * 死区。只数上升沿 —— 周期就是相邻两个上升沿的间隔。 */
+#define OSC_MEAS_FEED(v, tv)                                                 \
+    do {                                                                     \
+        const int32_t fv_ = (int32_t)(v);                                    \
+        if (m_seen == 0u) {                                                  \
+            m_seen = 1u;                /* 第一个样本只用来定基准 */          \
+        } else if (m_above != 0u) {                                          \
+            if (fv_ < m_thr_lo) { m_above = 0u; }                            \
+        } else if (fv_ > m_thr_hi && m_nedge < OSC_MEAS_MAX_EDGES) {         \
+            m_above = 1u;                                                    \
+            /* 上升沿落在上一个样本和这一个之间, 按值线性插值出穿越门限的     \
+             * 时刻。不插值的话分辨率就是采样间隔 (CH1 只有 160 ns), 一屏里  \
+             * 周期数一多, 量化误差会直接变成几十 Hz 的抖动。                 \
+             *                                                               \
+             * 除法在这里是安全的: 走到这儿必有 fv_ > thr_hi >= 上一个样本   \
+             * (状态机只在 fv_ > thr_hi 时才置 above), 所以分母至少是 1,     \
+             * 分子是 0 以上的, 不会除零也不会借位成一个大数。 */            \
+            const uint32_t te_ = (tv) - m_step +                             \
+                (uint32_t)((uint32_t)(m_thr_hi - (int32_t)m_prev) * m_step    \
+                           / (uint32_t)(fv_ - (int32_t)m_prev));              \
+            if (m_nedge == 0u) { m_t_first = te_; }                          \
+            m_t_last = te_;                                                  \
+            m_nedge++;                                                       \
+        }                                                                    \
+        m_prev = (uint16_t)fv_;                                              \
+    } while (0)
+
+/* 一屏扫完之后的结算: 全局 min/max、门限留给下一屏、频率。
+ *
+ * 也是宏 (同一个 m_ 约定), 因为两路的局部量一模一样。 */
+#define OSC_MEAS_FINISH(meas_ptr, ch_idx)                                    \
+    do {                                                                     \
+        /* 全局 min/max 从每列的 min/max 上取 —— 每一列的结果已经覆盖了那一列  \
+         * 里**所有**样本, 所以这两层取下来就是整屏的最小/最大值。1024 次比较  \
+         * 在片上 SRAM 上, 相比之下可以忽略。                                 \
+         *                                                                   \
+         * 这也是为什么峰峰值几乎不要钱: 内层那个读 SDRAM 的循环一行都不用改。*/ \
+        uint16_t g_lo_ = 0xFFFFu, g_hi_ = 0u;                                \
+        for (uint32_t i_ = 0u; i_ < OSC_TRACE_POINTS; i_++) {                \
+            const uint16_t yv_ = y[i_];                                      \
+            if (yv_ < g_lo_) g_lo_ = yv_;                                    \
+            if (yv_ > g_hi_) g_hi_ = yv_;                                    \
+        }                                                                    \
+                                                                             \
+        (meas_ptr)->lo    = g_lo_;                                           \
+        (meas_ptr)->hi    = g_hi_;                                           \
+        (meas_ptr)->valid = 1u;                                              \
+                                                                             \
+        s_thr_mid[ch_idx]  = (uint16_t)(((uint32_t)g_lo_ + g_hi_) / 2u);     \
+        s_thr_hyst[ch_idx] = meas_hyst(g_lo_, g_hi_);                        \
+                                                                             \
+        (meas_ptr)->freq_mhz = 0u;                                           \
+        (meas_ptr)->has_freq = 0u;                                           \
+                                                                             \
+        /* 至少要两个上升沿才谈得上"一个周期"。 */                            \
+        if (m_nedge >= 2u) {                                                 \
+            const uint32_t span_ns_ = m_t_last - m_t_first;                  \
+            const uint32_t nper_    = m_nedge - 1u;                          \
+                                                                             \
+            /* 周期太短就别报了, 见 OSC_MEAS_MIN_SAMPLES_PER_PERIOD。 */     \
+            if (span_ns_ >= OSC_MEAS_MIN_SAMPLES_PER_PERIOD * m_step * nper_) { \
+                /* 周期数 × 1e12 会溢出 32 位 (128 个周期就是 1.28e14), 用      \
+                 * uint64 算。一屏每路只做一次, 除法的开销 (__aeabi_uldivmod) \
+                 * 在这种频率下可以忽略。 */                                 \
+                const uint64_t f_ = (uint64_t)nper_ * 1000000000000ull / span_ns_; \
+                (meas_ptr)->freq_mhz = (f_ > 0xFFFFFFFFull) ? 0xFFFFFFFEu       \
+                                                            : (uint32_t)f_;    \
+                (meas_ptr)->has_freq = 1u;                                   \
+            }                                                                \
+        }                                                                    \
+    } while (0)
+
+/* CH1: 一个 word 装两个样本 —— 低 16 位是 ADC1 的, 时间在前; 高 16 位是 ADC2
+ * 的, 时间在后 (CM4 那边 ADC1/ADC2 多重模式交替采同一个输入)。所以 W 个 word
+ * = 2W 个样本, 只留下 min 和 max。
+ *
+ * 采样间隔是两个 ADC 交替的间隔, 也就是 OSC_WORD_PERIOD_NS / 2 —— 这一路的时间
+ * 轴是它, 不是 word 的周期。 */
+static void build_ch1(uint32_t start, uint32_t wpc, uint16_t *y, osc_meas_t *meas)
+{
+    const uint32_t m_step   = OSC_WORD_PERIOD_NS / 2u;
+    const int32_t  m_thr_hi = (int32_t)s_thr_mid[0] + (int32_t)s_thr_hyst[0];
+    const int32_t  m_thr_lo = (int32_t)s_thr_mid[0] - (int32_t)s_thr_hyst[0];
+    uint16_t m_prev = 0u;
+    uint32_t m_t    = m_step;      /* 第一个样本的时刻 */
+    uint32_t m_t_first = 0u;
+    uint32_t m_t_last  = 0u;
+    uint32_t m_nedge   = 0u;
+    uint8_t  m_above   = 0u;
+    uint8_t  m_seen    = 0u;
+
     for (uint32_t c = 0u; c < OSC_TRACE_COLUMNS; c++) {
         uint32_t w = start + c * wpc;
         uint16_t lo = 0xFFFFu;
@@ -387,16 +520,32 @@ static void build_ch1(uint32_t start, uint32_t wpc, uint16_t *y)
             if (a > hi) hi = a;
             if (b < lo) lo = b;
             if (b > hi) hi = b;
+
+            OSC_MEAS_FEED(a, m_t); m_t += m_step;   /* ADC1, 时间在前 */
+            OSC_MEAS_FEED(b, m_t); m_t += m_step;   /* ADC2, 时间在后 */
         }
 
         y[c * 2u]      = lo;
         y[c * 2u + 1u] = hi;
     }
+
+    OSC_MEAS_FINISH(meas, 0);
 }
 
 /* CH2: 一个 word 就是一个样本 (uint16), W 个 word = W 个样本。 */
-static void build_ch2(uint32_t start, uint32_t wpc, uint16_t *y)
+static void build_ch2(uint32_t start, uint32_t wpc, uint16_t *y, osc_meas_t *meas)
 {
+    const uint32_t m_step   = OSC_WORD_PERIOD_NS;
+    const int32_t  m_thr_hi = (int32_t)s_thr_mid[1] + (int32_t)s_thr_hyst[1];
+    const int32_t  m_thr_lo = (int32_t)s_thr_mid[1] - (int32_t)s_thr_hyst[1];
+    uint16_t m_prev = 0u;
+    uint32_t m_t    = m_step;
+    uint32_t m_t_first = 0u;
+    uint32_t m_t_last  = 0u;
+    uint32_t m_nedge   = 0u;
+    uint8_t  m_above   = 0u;
+    uint8_t  m_seen    = 0u;
+
     for (uint32_t c = 0u; c < OSC_TRACE_COLUMNS; c++) {
         uint32_t w = start + c * wpc;
         uint16_t lo = 0xFFFFu;
@@ -406,22 +555,35 @@ static void build_ch2(uint32_t start, uint32_t wpc, uint16_t *y)
             uint16_t v = CH2_WORD(w + k);
             if (v < lo) lo = v;
             if (v > hi) hi = v;
+
+            OSC_MEAS_FEED(v, m_t); m_t += m_step;
         }
 
         y[c * 2u]      = lo;
         y[c * 2u + 1u] = hi;
     }
+
+    OSC_MEAS_FINISH(meas, 1);
 }
 
-int OSC_Trace_Build(osc_trace_ch_t ch, uint16_t *y_out)
+int OSC_Trace_Build(osc_trace_ch_t ch, uint16_t *y_out, osc_meas_t *meas)
 {
+    /* 先把结果写成"什么都没量到"。后面任何一条提前返回的路径 (没在跑、环里还
+     * 没凑够一屏) 就都落在这一份上 —— 调用方不需要自己记"上一次是不是好的",
+     * 每次拿到的都是这一屏的真话。 */
+    meas->valid    = 0u;
+    meas->has_freq = 0u;
+    meas->lo       = 0u;
+    meas->hi       = 0u;
+    meas->freq_mhz = 0u;
+
     if (!OSC_Trace_IsRunning(ch)) return 0;    /* 停掉的那一路不再重新抠数 */
 
     uint32_t start, wpc;
     if (!window_start((uint32_t)ch, &start, &wpc)) return 0;
 
-    if (ch == OSC_TRACE_CH1) build_ch1(start, wpc, y_out);
-    else                     build_ch2(start, wpc, y_out);
+    if (ch == OSC_TRACE_CH1) build_ch1(start, wpc, y_out, meas);
+    else                     build_ch2(start, wpc, y_out, meas);
     return 1;
 }
 

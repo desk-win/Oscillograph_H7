@@ -113,9 +113,26 @@ public:
      * Model 算好一屏波形 → 交给波形控件重画。
      * 每通道 OSC_TRACE_POINTS 个点, 排布是 [min0, max0, min1, max1, ...]。
      * fresh1/fresh2 见 setTrace。
+     *
+     * meas1/meas2 是同一屏量出来的峰峰值/频率, 一起摆到右边那两个白框里 ——
+     * 波形和数字永远出自同一屏。nullptr 或者 valid == 0 就是"这一路没有数据"
+     * (没开、或者刚打开还没凑够一屏), 那一路的数字清空。
      */
     void updateTrace(const uint16_t* ch1, const uint16_t* ch2,
+                     const osc_meas_t* meas1, const osc_meas_t* meas2,
                      bool fresh1, bool fresh2);
+
+    /**
+     * 只重写一路的测量数字 (峰峰值 + 频率)。
+     *
+     * 单独留一个入口是给两个地方用的:
+     *   进界面 setupScreen —— 停着的那一路要把上次留下的数字擦掉;
+     *   拨开关关掉一路 —— 两路都停了之后 Model::tick 会提前返回, 再没有哪一帧
+     *   能把"清空"送过来 (和波形那边 setActive(ch, false) 是同一个理由)。
+     *
+     * m 传 0 或者 m->valid == 0 就是"这一路没有数据", 两个文字区清空。
+     */
+    void updateMeas(osc_trace_ch_t ch, const osc_meas_t* m);
 
     /**
      * 把右下角两个模式文字区按 Model 的设置重写一遍。
@@ -170,6 +187,22 @@ protected:
     void setModeText(touchgfx::TextAreaWithOneWildcard& ta,
                      touchgfx::Unicode::UnicodeChar* buffer, uint16_t bufferSize,
                      const osc_ui_state_t& st, uint32_t ch);
+
+    /**
+     * 写峰峰值那一行。gainCode 是这一路当前的放大档位 (倍数 = 1 << gainCode),
+     * 从 Presenter 问 Model 要 —— 原始计数换成电压全靠它。
+     */
+    void setVppText(touchgfx::TextAreaWithOneWildcard& ta,
+                    touchgfx::Unicode::UnicodeChar* buffer, uint16_t bufferSize,
+                    const osc_meas_t* m, uint32_t gainCode);
+
+    /**
+     * 写频率那一行。测不出来 (直流 / 一屏凑不满一个周期 / 周期短到插值失真)
+     * 就写 "----"。
+     */
+    void setFreqText(touchgfx::TextAreaWithOneWildcard& ta,
+                     touchgfx::Unicode::UnicodeChar* buffer, uint16_t bufferSize,
+                     const osc_meas_t* m);
 };
 
 #endif // OSCILLOGRAPHVIEW_HPP

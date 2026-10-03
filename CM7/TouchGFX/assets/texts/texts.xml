@@ -69,6 +69,27 @@
       <Text Id="oscScopeFmt" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">scope x&lt;value&gt;</Translation>
       </Text>
+      <Text Id="oscMeasNone" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="oscNoFreq" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">----</Translation>
+      </Text>
+      <Text Id="oscVppV" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;V</Translation>
+      </Text>
+      <Text Id="oscVppMv" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;mV</Translation>
+      </Text>
+      <Text Id="oscFreqHz" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;Hz</Translation>
+      </Text>
+      <Text Id="oscFreqKhz" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;kHz</Translation>
+      </Text>
+      <Text Id="oscFreqMhz" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;MHz</Translation>
+      </Text>
       <Text Id="protoUart" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">UART</Translation>
       </Text>

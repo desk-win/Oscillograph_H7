@@ -115,6 +115,29 @@ typedef struct {
 
 #define OSC_CTRL ((volatile osc_ctrl_t *)OSC_CTRL_ADDR)
 
+/* ===========================================================================
+ * 模拟前端的量程 —— 把 ADC 计数换算成探头上的电压时用的三个常数
+ *
+ * 信号进 ADC 之前走了这么一条路:
+ *
+ *     探头 ──[分压 OSC_FRONTEND_DIV]──> 运放 ──[× (1 << cfg_gain_chN)]──> ADC
+ *
+ * ADC 是 12 位、参考 OSC_ADC_VREF_MV, 0V 偏置在量程正中 (≈2048 个计数)。
+ * 所以探头上的电压和计数的关系是:
+ *
+ *     V = (计数 - 2048) / OSC_ADC_FULL_SCALE × OSC_ADC_VREF_MV
+ *         × OSC_FRONTEND_DIV / (1 << cfg_gain_chN)
+ *
+ * 峰峰值只用 (hi - lo), 偏置那一项自然消掉, 所以界面上不算它。
+ *
+ * 放在这儿而不是某个 .c 里, 是因为它就是"cfg_gain_chN 这个数在硬件上到底
+ * 乘了多少倍"的另一半 —— 两者是一句话的两截, 分开写迟早会各改一半。
+ * 这两个数只有 CM7 的界面在用 (CM4 只管摆引脚), 但它是硬件的事实, 所以
+ * 和 cfg_gain_chN 放在一起。 */
+#define OSC_ADC_VREF_MV     3300u    /* ADC 参考电压, mV */
+#define OSC_ADC_FULL_SCALE  4096u    /* 12 位 */
+#define OSC_FRONTEND_DIV    10u      /* 探头那一级的分压比 */
+
 /* 这个头文件将来可能被 C++ 的 Model.cpp 间接包含 */
 #ifdef __cplusplus
 #define OSC_STATIC_ASSERT(c, m) static_assert(c, m)

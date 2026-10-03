@@ -2,7 +2,12 @@
 #include <touchgfx/Color.hpp>
 #include <touchgfx/hal/HAL.hpp>
 #include <platform/driver/lcd/LCD16bpp.hpp>
-#include <texts/TextKeysAndLanguages.hpp>   /* T_OSCTIMEMS / T_OSCTIMEUS / T_OSCSCOPEFMT */
+#include <texts/TextKeysAndLanguages.hpp>   /* T_OSCTIMEMS / T_OSCTIMEUS / T_OSCSCOPEFMT /
+                                             * T_OSCVPPV / T_OSCVPPMV / T_OSCFREQHZ /
+                                             * T_OSCFREQKHZ / T_OSCFREQMHZ / T_OSCNOFREQ /
+                                             * T_OSCMEASNONE */
+#include "sharedconfig.h"                   /* OSC_ADC_VREF_MV / OSC_ADC_FULL_SCALE /
+                                             * OSC_FRONTEND_DIV —— 计数换电压 */
 
 /* 下面按 uint16_t 一个像素直接往显存里写, 所以显存必须是 RGB565。改了
  * USE_BPP 这里得跟着改, 卡一道免得悄悄画花。 */
@@ -188,6 +193,13 @@ void OscillographView::setupScreen()
     /* 波形控件也要跟着对齐。它自己记着"哪一路在画", 不跟着复位的话, 上一次
      * 离开时停掉的那一路会一直不画 —— 而开关看起来是 ON 的。 */
     traceWidget.setActive(run1, run2);
+
+    /* 右边那两组数字同样要对齐 —— 尤其是**停着的那一路**: 它上次离开这个
+     * 界面时留下的两个数字没人会再动它们 (Model::tick 对停掉的那一路返回 0,
+     * 根本不发通知), 就一直挂在屏幕上了。跑着的那一路不用管, 下一帧的测量值
+     * 自己会盖上来 (最多晚一个刷新周期)。 */
+    if (!run1) { updateMeas(OSC_TRACE_CH1, 0); }
+    if (!run2) { updateMeas(OSC_TRACE_CH2, 0); }
 }
 
 void OscillographView::tearDownScreen()
@@ -216,6 +228,10 @@ void OscillographView::acquireCallbackHandler(const touchgfx::AbstractButton& sr
          * 打开那一路反过来不在这里做 —— 交给 setTrace 的 fresh 标志, 免得
          * 先把缓冲里关机前那条旧波形闪一下。 */
         traceWidget.setActive(ch, false);
+
+        /* 右边那两个数字同理: 它和波形是同一条命 —— 没在采就没有"这一屏"可
+         * 言, 留着上一次的数看起来就像还在采。 */
+        updateMeas(ch, 0);
     }
     else
     {
@@ -224,10 +240,16 @@ void OscillographView::acquireCallbackHandler(const touchgfx::AbstractButton& sr
 }
 
 void OscillographView::updateTrace(const uint16_t* ch1, const uint16_t* ch2,
+                                   const osc_meas_t* meas1, const osc_meas_t* meas2,
                                    bool fresh1, bool fresh2)
 {
     /* 通道 1 → 青色, 通道 2 → 黄色, 两条都画在同一个图区里叠着 (和以前一样) */
     traceWidget.setTrace(ch1, ch2, fresh1, fresh2);
+
+    /* 数字和波形同一屏 —— measN->valid 就是 freshN, 所以"这一路没在采"和
+     * "刚打开还没凑够一屏"这两种情况都会落到清空那一条分支上。 */
+    updateMeas(OSC_TRACE_CH1, meas1);
+    updateMeas(OSC_TRACE_CH2, meas2);
 }
 
 /* ===========================================================================
@@ -330,5 +352,183 @@ void OscillographView::setModeText(touchgfx::TextAreaWithOneWildcard& ta,
     }
 
     /* 缓冲区填完了才量宽度, 见上面那一段。 */
+    ta.resizeToCurrentText();
+}
+
+/* ===========================================================================
+ * 右边那两个白框 —— 峰峰值和频率
+ *
+ * 布局 (OscillographViewBase.cpp):
+ *   CH1: boxWithBorder1 (684, 69, 108, 171), 里面是 "CH1" / ch1vpp (y=130) /
+ *        ch1frequency (y=181)
+ *   CH2: boxWithBorder2 (684, 254, 108, 176), 里面是 "CH2" / ch2vpp (y=312) /
+ *        ch2frequency (y=368)
+ *
+ * 这四个文字区和右下角那两个模式文字区一样, 是**宽度为 0** 的通配文字区 (生成
+ * 代码里 resizeToCurrentText 排在 setTypedText 之前, 见上面 updateModeText 那段
+ * 说明) —— 所以填完缓冲区必须自己 resizeToCurrentText() 再自己标脏, 否则填了
+ * 也看不见。
+ *
+ * 标脏标的是那个白框 (boxWithBorderN) 而不是文字区自己: 数字变短时控件矩形跟着
+ * 缩, 只标新矩形会在右边留下上次那一截残字; 白框是这两个文字区的**兄弟**, 标它
+ * 一次就把新旧宽度都盖住了, 框架会把这块区域上的兄弟一起重画 (白底 + 文字)。
+ *
+ * ── 宽度预算 ──
+ * 文字从 x=688 开始, 白框右边在 792 (还压着一条边框), 所以满打满算 102 像素。
+ * 20 号字一个数字宽 13、'.' 宽 7, 所以**所有格式都控制在 8 个字符以内** (最多
+ * 约 100 像素), 正好塞得下 —— 单位换挡的两个分界点就是照这个定的, 别随手往
+ * 小数点后面加位。CJK 的一个字是 20 像素, 更放不下。
+ * ========================================================================= */
+
+void OscillographView::updateMeas(osc_trace_ch_t ch, const osc_meas_t* m)
+{
+    /* 三元表达式两边都是同类型的左值, 所以这里拿到的是引用而不是副本。 */
+    touchgfx::TextAreaWithOneWildcard& vppTa =
+        (ch == OSC_TRACE_CH1) ? ch1vpp : ch2vpp;
+    touchgfx::TextAreaWithOneWildcard& freqTa =
+        (ch == OSC_TRACE_CH1) ? ch1frequency : ch2frequency;
+    touchgfx::Unicode::UnicodeChar* const vppBuf =
+        (ch == OSC_TRACE_CH1) ? ch1vppBuffer : ch2vppBuffer;
+    touchgfx::Unicode::UnicodeChar* const freqBuf =
+        (ch == OSC_TRACE_CH1) ? ch1frequencyBuffer : ch2frequencyBuffer;
+    const uint16_t vppSize  = (ch == OSC_TRACE_CH1) ? CH1VPP_SIZE : CH2VPP_SIZE;
+    const uint16_t freqSize = (ch == OSC_TRACE_CH1) ? CH1FREQUENCY_SIZE : CH2FREQUENCY_SIZE;
+    touchgfx::BoxWithBorder& box =
+        (ch == OSC_TRACE_CH1) ? boxWithBorder1 : boxWithBorder2;
+
+    if (m == 0 || m->valid == 0u)
+    {
+        /* 这一路没开, 或者刚打开、环里还没凑够一屏 —— 两个文字区都清空。
+         *
+         * **光把缓冲区写空是不够的**: 画的时候是拿模板当格式串、通配缓冲区往里
+         * 填, 缓冲区空了 "mV"、"kHz" 那几个字还在。所以模板也得换 —— 换成
+         * oscMeasNone, 那一条的内容就只有一个占位符, 缓冲区一空整条就什么都不
+         * 画, 量出来的宽度是 0 (宽度 0 的控件不会被画, 见上面那一段)。
+         *
+         * 旧的像素不靠"擦", 靠下面那次标脏重画白底盖掉。 */
+        vppTa.setTypedText(touchgfx::TypedText(T_OSCMEASNONE));
+        freqTa.setTypedText(touchgfx::TypedText(T_OSCMEASNONE));
+        vppBuf[0] = 0u;
+        freqBuf[0] = 0u;
+        vppTa.resizeToCurrentText();
+        freqTa.resizeToCurrentText();
+        box.invalidate();
+        return;
+    }
+
+    setVppText(vppTa, vppBuf, vppSize, m, presenter->getOscGain(ch));
+    setFreqText(freqTa, freqBuf, freqSize, m);
+    box.invalidate();
+}
+
+/* 峰峰值: 原始计数 → 探头上的电压。
+ *
+ *   1 个计数 = OSC_ADC_VREF_MV × OSC_FRONTEND_DIV / OSC_ADC_FULL_SCALE / 倍数
+ *
+ * 放大倍数是**从 Model 问的** (presenter->getOscGain), 不是从波形上反推的:
+ * 环里有 1.34 s 的历史, 刚换完档那几屏里装的还是旧倍数采的数据, 反推出来的
+ * 会是一个既不是旧倍数也不是新倍数的数。
+ *
+ * 先算成毫伏 (整数), 再按大小换单位显示 —— 完全不走浮点, 和时基那边一套做法。 */
+void OscillographView::setVppText(touchgfx::TextAreaWithOneWildcard& ta,
+                                  touchgfx::Unicode::UnicodeChar* buffer, uint16_t bufferSize,
+                                  const osc_meas_t* m, uint32_t gainCode)
+{
+    const uint32_t gain = 1u << gainCode;      /* S_4051 档位号 → 实际倍数 */
+    const uint32_t span = (uint32_t)m->hi - (uint32_t)m->lo;
+
+    /* 分子最大 4095 × 33000 = 1.35e8, 32 位装得下。倍数最小是 1, 不会除零。 */
+    const uint32_t mv = span * (OSC_ADC_VREF_MV * OSC_FRONTEND_DIV)
+                        / (OSC_ADC_FULL_SCALE * gain);
+
+    if (mv < 1000u)
+    {
+        /* 不到 1V 就写毫伏 —— 写 "0.33V" 的话小信号的分辨率全没了。
+         * 最多三位数 ("999mV", 5 个字符), 白框里空得很。 */
+        ta.setTypedText(touchgfx::TypedText(T_OSCVPPMV));
+        touchgfx::Unicode::snprintf(buffer, bufferSize, "%d", (int)mv);
+    }
+    else
+    {
+        /* 两位小数。整体除以 10 得到"百分之几伏"的整数, 再拆成整数部分和小数
+         * 部分分别交给 snprintf —— 和时基那边同一套 (见 updateModeText 里的说明:
+         * 小数部分用 "%0*d" 加精度, 不用 "%02d")。
+         * 最大 "32.99V", 6 个字符。 */
+        const uint32_t v = mv / 10u;
+        ta.setTypedText(touchgfx::TypedText(T_OSCVPPV));
+        touchgfx::Unicode::snprintf(buffer, bufferSize, "%d.%0*d",
+                                    (int)(v / 100u), 2, (int)(v % 100u));
+    }
+
+    /* 缓冲区填完了才量宽度, 和模式文字区一个道理。 */
+    ta.resizeToCurrentText();
+}
+
+/* 频率: 按大小换单位显示, 每个单位都保留 **4 位有效数字**。
+ *
+ * 为什么是 4 位而不是固定两位小数: 固定两位小数的话, 量一个 1.234567 kHz 的信
+ * 号显示 "1.23kHz" (三位有效数字), 量 123.456 kHz 又变成 "123.46kHz" —— 最宽的
+ * 一行 "999.99kHz" 是 9 个字符、109 像素, 会顶穿那个 108 像素宽的白框。按 4 位
+ * 有效数字取, 最宽的一行 (123.4kHz / 12.34kHz / 1.234kHz) 都是 8 个字符, 而且
+ * 和台表那种频率计的读法一致。
+ *
+ * 测不出来的情况写 "----" 而不是 0Hz 或者空着: 直流信号、一屏里凑不满一个完整
+ * 周期、周期短到插值开始失真 (见 oscillograph_trace.h 的 OSC_MEAS_*), 这三种都是
+ * "这一项量不了", 写个 0 会让人以为信号真的是 0Hz。 */
+void OscillographView::setFreqText(touchgfx::TextAreaWithOneWildcard& ta,
+                                   touchgfx::Unicode::UnicodeChar* buffer, uint16_t bufferSize,
+                                   const osc_meas_t* m)
+{
+    if (m->has_freq == 0u)
+    {
+        /* 这一条的译文就是一串破折号, **里面没有占位符** —— 所以通配缓冲区那
+         * 一路用不上 (画的时候只认格式串里的 0x02), 上一次留下的数字不会漏出来。
+         * 这样也就不用管缓冲区大小, 比 "占位符 + 缓冲区填 ----" 干净。 */
+        ta.setTypedText(touchgfx::TypedText(T_OSCNOFREQ));
+        ta.resizeToCurrentText();
+        return;
+    }
+
+    /* freq_mhz 的单位是 0.001 Hz。下面每个分支都是"把值换算成某个最小刻度上的
+     * 整数, 再拆成整数部分和小数部分" —— 刻度的选取就是小数位数的选取。 */
+    const uint32_t f = m->freq_mhz;
+
+    if (f < 1000000u)
+    {
+        /* 不到 1kHz: 直接写 Hz, 两位小数 (最长 "999.99Hz")。
+         * 刻度 0.01 Hz = 10 mHz。 */
+        const uint32_t v = f / 10u;
+        ta.setTypedText(touchgfx::TypedText(T_OSCFREQHZ));
+        touchgfx::Unicode::snprintf(buffer, bufferSize, "%d.%0*d",
+                                    (int)(v / 100u), 2, (int)(v % 100u));
+    }
+    else if (f < 1000000000u)
+    {
+        /* 1kHz ~ 1MHz: 写 kHz。三位/两位/一位小数分别是 1.001kHz / 12.34kHz /
+         * 123.4kHz —— 整数位每多一位, 小数位就少一位, 总宽不变。
+         *
+         * div   一个刻度是多少 mHz (也就是小数最后一位的量纲)
+         * frac  小数部分的进制 (取模用) */
+        uint32_t div, frac, digits;
+        if (f < 10000000u)          { div = 1000u;   frac = 1000u; digits = 3u; }  /* 0.001 kHz = 1 Hz */
+        else if (f < 100000000u)    { div = 10000u;  frac = 100u;  digits = 2u; }  /* 0.01 kHz = 10 Hz */
+        else                        { div = 100000u; frac = 10u;   digits = 1u; }  /* 0.1 kHz = 100 Hz */
+
+        const uint32_t v = f / div;
+        ta.setTypedText(touchgfx::TypedText(T_OSCFREQKHZ));
+        touchgfx::Unicode::snprintf(buffer, bufferSize, "%d.%0*d",
+                                    (int)(v / frac), (int)digits, (int)(v % frac));
+    }
+    else
+    {
+        /* 1MHz 往上: 写 MHz, 三位小数 (最长 "1.562MHz" —— 采样间隔决定了再快的
+         * 频率根本量不出来, 见 osc_meas_t 的说明)。
+         * 刻度 0.001 MHz = 1 kHz = 1e6 mHz。 */
+        const uint32_t v = f / 1000000u;
+        ta.setTypedText(touchgfx::TypedText(T_OSCFREQMHZ));
+        touchgfx::Unicode::snprintf(buffer, bufferSize, "%d.%0*d",
+                                    (int)(v / 1000u), 3, (int)(v % 1000u));
+    }
+
     ta.resizeToCurrentText();
 }

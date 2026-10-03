@@ -44,11 +44,23 @@ public:
     bool isAcquisitionRunning(osc_trace_ch_t ch);
 
     /**
+     * 这一路当前的放大档位 (0..OSC_GAIN_STEPS-1, 实际倍数 = 1 << n)。
+     *
+     * 给 View 用的: 测量出来的峰峰值是**原始计数**, 换成探头上真实电压要除以
+     * 放大倍数再乘上探头那一级的分压比, 而放大倍数是 Model 记的设置。
+     */
+    uint8_t getOscGain(osc_trace_ch_t ch);
+
+    /**
      * Model 算好一屏波形了 (来自 ModelListener)。两个通道的内容都在里面,
      * fresh1/fresh2 说明哪几路是真的新数据 —— 谁该画由 View 那边的控件按它
      * 决定。
+     *
+     * meas1/meas2 是同一屏量出来的峰峰值/频率 (原始计数), valid 就是 fresh1/
+     * fresh2 的另一种说法 —— View 那边一起摆到右边的白框里。
      */
     virtual void traceUpdated(const uint16_t* ch1, const uint16_t* ch2,
+                              const osc_meas_t* meas1, const osc_meas_t* meas2,
                               bool fresh1, bool fresh2);
 
     /**
