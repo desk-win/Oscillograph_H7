@@ -57,13 +57,43 @@ typedef struct {
     uint8_t  rx_ch;     /* 逻辑通道 0..7 (UART 接线约定 CH1 收 RX, 所以是 0) */
 } log_ana_uart_cfg_t;
 
+/* SPI —— 完全同步, 时钟线 (SCK) 就在采集里, 所以和 I2C 一样没有波特率可配。
+ *
+ * 接线约定 (见 Logic_SettingView.cpp 的通道表):
+ *   CH1 = CS, CH2 = SCK, CH3 = MISO, CH4 = MOSI
+ *
+ * 一个字按 8 个采样沿算。16/32 位字长的器件解出来会按字节两两颠倒 —— 这一版
+ * 不做, 真碰上了再说。 */
+typedef struct {
+    uint8_t cpol;       /* 空闲时 SCK 的电平: 0 或 1 */
+    uint8_t cpha;       /* 0 = 前沿采样, 1 = 后沿采样 */
+    uint8_t cs_active;  /* CS **选中**时的电平: 0 = 低有效 (常规), 1 = 高有效 */
+} log_ana_spi_cfg_t;
+
+/* CAN —— 和 UART 一样是异步的 (线上没有时钟线, 位定时全靠约定), 所以要有波特率。
+ *
+ * 接线约定: CH1 = RX, 也就是收发器给 MCU 的那根 RXD。它的极性是**隐性 (总线空闲)
+ * 为高、显性 (逻辑 0) 为低** —— 和 UART 的空闲电平同一个约定, 所以"起始位 =
+ * 下降沿"这句话两边都成立, 别让差分那两个字把人绕进去。
+ *
+ * 波特率是**仲裁段的位速率**: 采样点跑在 125k/250k/500k 三档里。 */
+typedef struct {
+    uint32_t baud;      /* 125k / 250k / 500k */
+} log_ana_can_cfg_t;
+
 /* 一条解出来的帧。
  *
  * 四种协议共用这一种条目, 而不是各写各的: Model / View / 格式化那一整条通路
- * 只认这一个结构, 以后加 I2C/SPI/CAN 时它们一行都不用改 —— 只是往 union 里
- * 加一个结构、往 Run() 里加一个分支、往格式化里加一种排法。
+ * 只认这一个结构。加一种协议时只是往 union 里加一个结构、往 Run() 里加一个分支、
+ * 往格式化里加一种排法。
  *
- * UART 只用到 data[0] 一个字节; 12 是给 CAN (ID + 8 字节数据) 留的位置。 */
+ * data[] 各协议的用法:
+ *   UART  data[0]                    一条 = 一帧 = 一个字节
+ *   I2C   data[0]                    一条 = 一个字节 (地址字节也是其中一条)
+ *   SPI   data[0] = MOSI, data[1] = MISO
+ *                                    一条 = 一个 8 位的字, 两个方向一起交出去
+ *   CAN   data[0..3] = ID (大端), data[4..] = 数据
+ *                                    一条 = 一帧; 4 + 8 正好把 12 用满 */
 #define LOG_ANA_ITEM_MAX   12u
 
 typedef struct {
@@ -72,7 +102,7 @@ typedef struct {
     uint8_t  flags;                   /* LOG_ANA_IT_* */
     uint8_t  len;                     /* data[] 有效字节数 */
     uint8_t  aux;                     /* 协议相关: I2C = 这一字节归属的 7 位地址,
-                                       * CAN = DLC。见下面各协议的说明 */
+                                       * CAN = DLC, SPI/UART 不用 (0)。见各协议说明 */
     uint8_t  data[LOG_ANA_ITEM_MAX];
 } log_ana_item_t;
 
@@ -95,6 +125,27 @@ typedef struct {
 /* aux 的"还不知道属于哪个地址"。7 位地址只占 0..127, 所以 0xFF 是安全的哨兵。 */
 #define LOG_ANA_I2C_NOADDR    0xFFu
 
+/* ---- SPI 专用 (proto == LOG_ANA_SPI) ----
+ *
+ * SPI 没有帧界 —— CS 一拉低就是一段传输的开始, 拉高就是结束, 段内按 8 个采样沿
+ * 一个字一直数下去。所以显示时按 CS 分段, 靠的就是这个标记: 它打在**一段传输的
+ * 第一个字**上, 后面的字都没有。
+ *
+ * 和 I2C 的 LOG_ANA_IT_I2C_ADDR 是同一个位 —— 标记位是**按协议各自解释**的
+ * (看 flags 之前先看 proto), 不共用一套语义, 所以位值可以重。 */
+#define LOG_ANA_IT_SPI_CS     0x10u   /* 这一条是 CS 选中之后的第一拍 (一段的开头) */
+
+/* ---- CAN 专用 (proto == LOG_ANA_CAN) ----
+ *
+ * DLC 单独有个字段放 (aux), 所以这里只有"怎么解释 ID"和"有没有人应答"两件事。
+ *
+ * ACK 槽是发方发隐性、**任何一个收对了的节点**把它拉成显性。所以:
+ *   显性 (0) = 总线上有别人, 正常
+ *   隐性 (1) = 只有自己在喊, 没有从机 —— 接线错了、对方没上电、或者波特率不对
+ * 这和 I2C 的 NACK 是同一类信息, 也是排查 CAN 最常要看的一条。 */
+#define LOG_ANA_IT_CAN_EXT    0x10u   /* 扩展帧: ID 是 29 位, 不是 11 位 */
+#define LOG_ANA_IT_CAN_NOACK  0x20u   /* 没人应答 (ACK 槽是隐性) */
+
 /* 解出来的帧数上限。到顶就截断, 剩下的不存 (log_ana_diag_trunc 记一笔)。
  *
  * 512 是按菜屏上那块文字区定的: 白框 (0,91,800,389) + verdana 20 大约放得下
@@ -102,12 +153,15 @@ typedef struct {
  * 内存, 用户也看不到。 */
 #define LOG_ANA_MAX_ITEMS  512u
 
-/* 一次解码需要的全部配置。现在 union 里只有 UART 一份, 加协议时才长出来。 */
+/* 一次解码需要的全部配置。union 里按协议各一份 —— I2C 那份是空的 (它没得可配),
+ * 所以没有成员, 只有 proto 那个数。 */
 typedef struct {
     uint8_t proto;          /* LOG_ANA_* */
     uint8_t rsvd[3];        /* 补齐 + 以后要加的标记位 */
     union {
         log_ana_uart_cfg_t uart;
+        log_ana_spi_cfg_t  spi;
+        log_ana_can_cfg_t  can;
     } u;
 } log_ana_cfg_t;
 

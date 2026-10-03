@@ -65,6 +65,19 @@ const uint8_t  UART_PARITY_VAL[3] = { LOG_UART_PARITY_NONE,
                                       LOG_UART_PARITY_ODD,
                                       LOG_UART_PARITY_EVEN };
 
+/* CPOL / CPHA 共用 VAL_SPI_LEVEL = { T_VAL1, T_VAL0 }, 所以也共用这一张:
+ * 下标 0 是"1", 下标 1 是"0" —— **不是**按数值顺序排的, 别看着 0/1 想当然。 */
+const uint8_t  SPI_LEVEL_VAL[2]   = { 1u, 0u };
+
+/* CS 选中时的电平。VAL_SPI_CS = { T_VALHIGH, T_VALLOW }, 所以下标 0 = 高有效。
+ * 注意这是**开机默认值** —— 常规 SPI 器件都是低有效, 所以默认这一档解码时多半
+ * 一段传输都认不出来。真要用得顺手, 把 VAL_SPI_CS 调成 { T_VALLOW, T_VALHIGH },
+ * 这里跟着变成 { 0u, 1u }, logic_analyze.c 的 LOG_Analyze_Init() 也要一起改。 */
+const uint8_t  SPI_CS_VAL[2]      = { 1u, 0u };
+
+/* CAN 的仲裁段位速率, 不是采样率也不是时钟 —— 就是线上每秒多少个位。 */
+const uint32_t CAN_BAUD_VAL[3]    = { 125000u, 250000u, 500000u };
+
 /* 几个元素 —— 给下面那堆 static_assert 用的。 */
 template <typename T, uint32_t N>
 constexpr uint32_t nElem(const T (&)[N])
@@ -76,6 +89,9 @@ static_assert(nElem(UART_BAUD_VAL)   == nElem(VAL_UART_BAUD),   "波特率: 文�
 static_assert(nElem(UART_STOP_VAL)   == nElem(VAL_UART_STOP),   "停止位: 文本表和真值表条数对不上");
 static_assert(nElem(UART_DATA_VAL)   == nElem(VAL_UART_DATA),   "数据位: 文本表和真值表条数对不上");
 static_assert(nElem(UART_PARITY_VAL) == nElem(VAL_UART_PARITY), "校验位: 文本表和真值表条数对不上");
+static_assert(nElem(SPI_LEVEL_VAL)   == nElem(VAL_SPI_LEVEL),   "CPOL/CPHA: 文本表和真值表条数对不上");
+static_assert(nElem(SPI_CS_VAL)      == nElem(VAL_SPI_CS),      "CS 极性: 文本表和真值表条数对不上");
+static_assert(nElem(CAN_BAUD_VAL)    == nElem(VAL_CAN_BAUD),    "CAN 波特率: 文本表和真值表条数对不上");
 
 struct ProtoOptRow
 {
@@ -114,10 +130,28 @@ const ProtoOptRow ROWS_SPI[3] =
     { T_OPTCS,   VAL_SPI_CS,    2 },
 };
 
+/* ROWS_SPI 的行号 —— 同 ROW_UART_* 那段。 */
+enum
+{
+    ROW_SPI_CPOL = 0,
+    ROW_SPI_CPHA,
+    ROW_SPI_CS,
+    ROW_SPI_COUNT
+};
+static_assert(ROW_SPI_COUNT == 3, "ROWS_SPI 的行数改了, 这个枚举也要跟着改");
+
 const ProtoOptRow ROWS_CAN[1] =
 {
     { T_OPTBAUD, VAL_CAN_BAUD, 3 },
 };
+
+/* ROWS_CAN 的行号 —— CAN 只有波特率一行。 */
+enum
+{
+    ROW_CAN_BAUD = 0,
+    ROW_CAN_COUNT
+};
+static_assert(ROW_CAN_COUNT == 1, "ROWS_CAN 的行数改了, 这个枚举也要跟着改");
 
 /* ---- 两张表合起来的模式表 -------------------------------------------------- */
 struct ProtoModeDef
@@ -298,9 +332,29 @@ void Logic_SettingView::saveCallbackHandler(const touchgfx::AbstractButton& src)
          * 这个不是这里能配的东西, 所以写死。 */
         cfg.u.uart.rx_ch     = 0u;
     }
-    /* I2C / SPI / CAN 这一轮只把模式记下来 —— 解码层那三种还没实现
-     * (LOG_Analyze_Run 现在只认 UART)。真值那几个字段留在 0, 等那边做了再按各自
-     * 的表填。 */
+    else if (mode == LOG_PROTO_SPI)
+    {
+        const uint8_t p = presenter->getLogicCfgValue(ROW_SPI_CPOL);
+        const uint8_t h = presenter->getLogicCfgValue(ROW_SPI_CPHA);
+        const uint8_t s = presenter->getLogicCfgValue(ROW_SPI_CS);
+
+        cfg.u.spi.cpol      = SPI_LEVEL_VAL[p < nElem(SPI_LEVEL_VAL) ? p : 0u];
+        cfg.u.spi.cpha      = SPI_LEVEL_VAL[h < nElem(SPI_LEVEL_VAL) ? h : 0u];
+        cfg.u.spi.cs_active = SPI_CS_VAL   [s < nElem(SPI_CS_VAL)    ? s : 0u];
+
+        /* 四条线的接法是约定, 不是这里能配的 (见文件头 ①), 所以解码层那边写死:
+         * CH1 = CS, CH2 = SCK, CH3 = MISO, CH4 = MOSI。 */
+    }
+    else if (mode == LOG_PROTO_CAN)
+    {
+        const uint8_t b = presenter->getLogicCfgValue(ROW_CAN_BAUD);
+
+        cfg.u.can.baud = CAN_BAUD_VAL[b < nElem(CAN_BAUD_VAL) ? b : 0u];
+
+        /* 同上: RXD 进 CH1 是接线约定。 */
+    }
+    /* I2C 走不到任何一个分支 —— 它一个可配项都没有, 只有上面那句
+     * cfg.proto = mode 是有意义的。 */
 
     presenter->commitLogicConfig(cfg);
 

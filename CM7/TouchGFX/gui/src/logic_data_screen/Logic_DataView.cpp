@@ -158,6 +158,25 @@ void Logic_DataView::showLogicData(const log_ana_item_t* items, uint32_t count)
     uint32_t rows = 1u;     /* 已经开了几行 —— 第一行从开头就算数 */
     uint32_t k    = 0u;
 
+    /* SPI 的每一组是 "MOSI/MISO", 光看数字分不出哪边是哪边 —— 先摆一行图例。
+     *
+     * 代价是占掉一行 (16 行里少一行数据)。和 I2C 的 [50 w]、CAN 的 ID: 不一样,
+     * 那两个格式自己就把含义写全了, 只有 SPI 是两个平级的数字并排。 */
+    if (count != 0u && items[0].proto == LOG_ANA_SPI)
+    {
+        out.put('m');
+        out.put('o');
+        out.put('/');
+        out.put('m');
+        out.put('i');
+
+        if (rows < maxRows)
+        {
+            out.newline(0u);
+            rows++;
+        }
+    }
+
     for (; k < count; k++)
     {
         if (out.full || rows > maxRows)
@@ -167,9 +186,16 @@ void Logic_DataView::showLogicData(const log_ana_item_t* items, uint32_t count)
 
         const log_ana_item_t& it = items[k];
 
-        /* I2C 里"地址字节"就是一段消息的开头, 它前面一定要换行。 */
-        const bool i2c     = (it.proto == LOG_ANA_I2C);
-        const bool new_msg = i2c && ((it.flags & LOG_ANA_IT_I2C_ADDR) != 0u);
+        /* 三种有"一段"这个概念的协议, 各有一个"我是段首"的标记:
+         *   I2C  地址字节 (它是起始位之后的第一条)
+         *   SPI  CS 选中之后的第一拍
+         *   CAN  每一帧本身就是一段, 所以恒为真
+         * UART 没有, 一条就是一条。段首一定另起一行。 */
+        const bool new_msg = ((it.proto == LOG_ANA_I2C &&
+                               (it.flags & LOG_ANA_IT_I2C_ADDR) != 0u) ||
+                              (it.proto == LOG_ANA_SPI &&
+                               (it.flags & LOG_ANA_IT_SPI_CS) != 0u) ||
+                              (it.proto == LOG_ANA_CAN));
 
         /* 没被应答的字节后面跟个 '?'。
          *
@@ -178,31 +204,107 @@ void Logic_DataView::showLogicData(const log_ana_item_t* items, uint32_t count)
          * 记成 LOG_ANA_IT_I2C_NACK 了, 这里不显示就等于白解。
          *
          * '?' 字体里有 (它还是 FallbackCharacter, 一定在), 读起来也顺: [50 w]?
-         * 就是"叫了 0x50 写, 没人应"。 */
-        const uint32_t nack_w = ((it.flags & LOG_ANA_IT_I2C_NACK) != 0u) ? 1u : 0u;
-
-        /* 这一条要占多宽。行首不用前面那个分隔空格, 所以是 2 不是 3;
-         * 地址那条固定 6 个字符 ("[50 w]")。 */
-        const uint32_t width = (new_msg ? 6u : (out.fresh ? 2u : 3u)) + nack_w;
-
-        /* ---- 先决定换不换行 ----
+         * 就是"叫了 0x50 写, 没人应"。
          *
-         * I2C 一个消息一行 (地址字节打头), 行内摆不下再按行宽续行; UART 没有消息
-         * 的概念, 就老实按行宽断。行首不用换。 */
-        const bool wrap = new_msg ? !out.fresh : (out.line + width > LINE_CHARS);
+         * 判 proto 不能省: 标记位是**按协议各自解释**的, 同一个位在别的协议里
+         * 是另一个意思 (0x40 对 UART 没定义, 对 CAN 也不是 NACK)。 */
+        const uint32_t nack_w = ((it.proto == LOG_ANA_I2C &&
+                                  (it.flags & LOG_ANA_IT_I2C_NACK) != 0u)) ? 1u : 0u;
 
-        if (wrap)
+        /* ---- 这一条要写几个字符, 以及它被挤到下一行时缩进多少 ----
+         *
+         * 缩进是让续行的数据和上一行的第一组对齐 —— 有意义的只有 I2C (对齐到数据
+         * 那一列) 和 CAN (对齐到冒号后面), SPI 是一串等宽的小组, 不缩更好认。
+         *
+         * width 含前面那个分隔空格 (行首没有), 所以行首那一位要单独算。 */
+        uint32_t width;
+        uint32_t indent;
+
+        if (it.proto == LOG_ANA_CAN)
+        {
+            /* "<ID>:" 再加 " xx" × 数据字节数。标准帧 ID 补到 3 位、扩展帧补到
+             * 8 位 —— 补齐而不是掐掉前导零, 是为了让同一路总线上每一帧的宽度都
+             * 一样, 续行缩进才对得齐。 */
+            const uint32_t idw   = ((it.flags & LOG_ANA_IT_CAN_EXT) != 0u) ? 8u : 3u;
+            const uint32_t ndata = (it.aux <= 8u) ? it.aux : 8u;
+
+            width  = idw + 1u + ndata * 3u;
+            indent = idw + 2u;
+        }
+        else if (it.proto == LOG_ANA_SPI)
+        {
+            width  = 5u;        /* "mm/ss" —— MOSI 在前, MISO 在后 */
+            indent = 0u;
+        }
+        else if (new_msg)       /* I2C 的地址字节 */
+        {
+            width  = 6u + nack_w;       /* "[50 w]" */
+            indent = 0u;
+        }
+        else                    /* UART 的帧 / I2C 的数据字节: 一个字节 */
+        {
+            width  = 2u + nack_w;
+            indent = I2C_INDENT;
+        }
+
+        /* 行首不用分隔空格, 那一格就不算进宽度里。*/
+        if (!out.fresh)
+        {
+            width++;
+        }
+
+        /* ---- 换不换行 ----
+         * 段首一定另起一行; 其余按行宽断。行首不用换。 */
+        if (new_msg ? !out.fresh : (out.line + width > LINE_CHARS))
         {
             if (rows >= maxRows)
             {
                 break;              /* 屏幕上摆不下了, 后面的都别写 */
             }
-            /* 续行缩进到数据那一列; 新消息从最左边开始, 不缩。 */
-            out.newline(new_msg ? 0u : I2C_INDENT);
+            out.newline(new_msg ? 0u : indent);
             rows++;
         }
 
-        if (new_msg)
+        /* ---- CAN: 一帧整条写在一行里 ----
+         *
+         * 它不靠上面那套"一条一个小组"的换行: 一帧的 ID 和数据是一件事, 中间断开
+         * 反而看不懂。最长 8+1+8×3 = 33 个字符, 一个 LINE_CHARS (50) 装得下。 */
+        if (it.proto == LOG_ANA_CAN)
+        {
+            const uint32_t id = ((uint32_t)it.data[0] << 24)
+                              | ((uint32_t)it.data[1] << 16)
+                              | ((uint32_t)it.data[2] << 8)
+                              |  (uint32_t)it.data[3];
+            const uint32_t idw   = ((it.flags & LOG_ANA_IT_CAN_EXT) != 0u) ? 8u : 3u;
+            const uint32_t ndata = (it.aux <= 8u) ? it.aux : 8u;
+
+            for (uint32_t d = idw; d > 0u; d--)
+            {
+                out.put(HEX_DIGIT[(id >> ((d - 1u) * 4u)) & 0x0Fu]);
+            }
+            out.put(':');
+
+            for (uint32_t b = 0u; b < ndata; b++)
+            {
+                const uint8_t v = it.data[4u + b];
+                out.put(' ');
+                out.put(HEX_DIGIT[(v >> 4) & 0x0Fu]);
+                out.put(HEX_DIGIT[v & 0x0Fu]);
+            }
+
+            if ((it.flags & LOG_ANA_IT_CAN_NOACK) != 0u)
+            {
+                out.put('?');       /* 总线上没人应答 —— 只有自己在喊 */
+            }
+            continue;
+        }
+
+        if (!out.fresh)
+        {
+            out.put(' ');
+        }
+
+        if (it.proto == LOG_ANA_I2C && new_msg)
         {
             /* 地址那一条显示成 [50 w] —— 地址 + 方向, 而不是它在线上的原样
              * (0xA0)。两者等价, 前者才是人想看的: 哪个器件、读还是写。
@@ -224,13 +326,25 @@ void Logic_DataView::showLogicData(const log_ana_item_t* items, uint32_t count)
             continue;
         }
 
-        if (!out.fresh)
+        if (it.proto == LOG_ANA_SPI)
         {
-            out.put(' ');
+            /* mm/ss —— MOSI 在前 (主机发出去的), MISO 在后 (从机回来的)。
+             *
+             * 数据段是采样沿那一刻两路上各自的值, 解码那边就摆在 data[0]/data[1]。
+             * MISO 没接的话这一路会在线上飘, 画出来是乱的 —— 那本身也是有用的
+             * 信息 (那一栏根本没接), 所以照实画。 */
+            const uint8_t mo = (it.len > 0u) ? it.data[0] : 0u;
+            const uint8_t mi = (it.len > 1u) ? it.data[1] : 0u;
+
+            out.put(HEX_DIGIT[(mo >> 4) & 0x0Fu]);
+            out.put(HEX_DIGIT[mo & 0x0Fu]);
+            out.put('/');
+            out.put(HEX_DIGIT[(mi >> 4) & 0x0Fu]);
+            out.put(HEX_DIGIT[mi & 0x0Fu]);
+            continue;
         }
 
-        /* I2C 的数据字节和 UART 的帧都是"一个字节落在 data[0]"。以后加 SPI/CAN
-         * 时改这里 —— 它们一条带好几个字节, 得再套一层循环。 */
+        /* 剩下来的就是 UART 的帧和 I2C 的数据字节 —— 都是一个字节落在 data[0]。 */
         const uint8_t b = (it.len != 0u) ? it.data[0] : 0u;
 
         out.put(HEX_DIGIT[(b >> 4) & 0x0Fu]);
