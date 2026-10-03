@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+/* LOG_Trace_GetRecs 的参数用到了 log_rec_t, 所以这个头得自己把它拉进来 ——
+ * 以前只有 .c 那边用到, 靠 logic_trace.c 自己 include 就够了; 现在 C++ 侧
+ * (Model) 也 include 这个头, 缺了它就是 "'log_rec_t' does not name a type"。 */
+#include "sharedconfig.h"
+
 /* 这个头会被 C 和 C++ 两边 include (TouchGFX 的 Model 是 C++), 不加这个
  * 守卫链接期会因为名字修饰对不上而报 undefined reference。 */
 #ifdef __cplusplus
@@ -199,6 +204,39 @@ void LOG_Trace_Poll(void);
  * 返回 0 时三个出参都不动。
  */
 uint8_t LOG_Trace_GetCols(const uint16_t **level, const uint16_t **change, uint32_t *ncols);
+
+/**
+ * 取跳变记录表的只读视图 —— 这是协议解码那一层 (logic_analyze.c) 的输入。
+ *
+ * 列数据 (GetCols) 是给**画波形**用的, 它已经把记录归约成 520 列了 —— 那是
+ * 有损的, 解不出协议。解码要的是原始跳变表: 每个跳变的时间和当时的完整电平。
+ *
+ * **返回 0 (三个出参一个都不动) 的三种情况**:
+ *   - 采集还在跑: 记录表正被半帧中断追加, 读出来是半截的
+ *   - 这一次上电还没采过 (下面 GetResultSeq 那个记号还是 0)
+ *   - 记录条数 <= 1, 也就是只有记录 0 那条起点电平, 一个跳变都没有
+ *
+ * *recs 指到 LOG_REC_BUF (D1 AXI SRAM 里那 512 KB), 不用释放。*count 是**有效
+ * 条数**不是容量。*last_rec_ts 是最后一条的采样序号, 不需要就传 0。
+ *
+ * **拿到指针之后不能让采集再跑起来** —— 上面的判断是"那一刻"的, 中间开了采集
+ * 的话记录会从 LOG_REC_BUF[0] 开始被覆写, 边读边盖, 解出来是垃圾。
+ * (调用点现在是 Model::tick, 同期不会有别的线程动这个闸; 以后解码挪进独立
+ * RTOS 任务时, 这一条要重新想一遍 —— 见 logic_analyze.h 里 Run 的说明。)
+ */
+uint8_t LOG_Trace_GetRecs(const log_rec_t **recs, uint32_t *count,
+                          uint32_t *last_rec_ts);
+
+/**
+ * 采集结果的代数: 每完成一轮采集 (记录满 / 空闲超时) 加一, 开机是 0。
+ *
+ * 和 s_build_seq 是同一个数 —— 那个记号本来就在"采集收工"时自增 (tick 拿它
+ * 判该不该归约), 这里只是把它交出来。只增不减, Start / Clear 都不清它。
+ *
+ * 解码那一层拿它判"这一轮解过没有", 免得每次点进 Logic_Data 都把同一批记录
+ * 重解一遍。
+ */
+uint32_t LOG_Trace_GetResultSeq(void);
 
 /* ---- 诊断 ---- */
 

@@ -922,3 +922,38 @@ uint8_t LOG_Trace_GetCols(const uint16_t **level, const uint16_t **change,
     if (ncols  != 0) *ncols  = s_ncols;
     return 1u;
 }
+
+uint8_t LOG_Trace_GetRecs(const log_rec_t **recs, uint32_t *count,
+                          uint32_t *last_rec_ts)
+{
+    /* 三个前提逐个判, 一个不满足就当"现在没东西可给"。
+
+     * s_running 那一条是硬要求, 不只是"数据会变": 记录表是 512 KB 的固定地址
+     * (LOG_REC_BUF_ADDR), 新一轮采集会把 s_rec_count 归零、从 LOG_REC_BUF[0]
+     * 重新写 —— 读的人手上要是还攥着上一个指针, 边读边被盖。
+     *
+     * s_build_seq == 0 说明这一次上电还没跑完过一轮采集; 记录条数 <= 1 说明只有
+     * 记录 0 (起点电平), 没有任何跳变可解。
+
+     * 注意 Clear 之后这三条也都成立: 它把 s_rec_count 清成 0, 于是卡在 <= 1
+     * 这一条上 —— 不需要额外再判一次"是不是刚被清过"。 */
+    if (s_running != 0u) {
+        return 0u;
+    }
+    if (s_build_seq == 0u) {
+        return 0u;
+    }
+    if (s_rec_count <= 1u) {
+        return 0u;
+    }
+
+    if (recs        != 0) { *recs        = LOG_REC_BUF; }
+    if (count       != 0) { *count       = s_rec_count; }
+    if (last_rec_ts != 0) { *last_rec_ts = s_last_ts; }
+    return 1u;
+}
+
+uint32_t LOG_Trace_GetResultSeq(void)
+{
+    return s_build_seq;
+}

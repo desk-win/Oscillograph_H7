@@ -1,0 +1,189 @@
+#ifndef __LOGIC_ANALYZE_H
+#define __LOGIC_ANALYZE_H
+
+#include <stdint.h>
+#include "sharedconfig.h"       /* log_rec_t */
+
+/* 这个头会被 C 和 C++ 两边 include (TouchGFX 的 Model 是 C++), 不加这个
+ * 守卫链接期会因为名字修饰对不上而报 undefined reference。 */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ===========================================================================
+ * CM7 侧逻辑分析仪 —— 协议解码层
+ *
+ * 上游是 logic_trace.c 的记录表 (跳变表), 下游是 Logic_Data 屏上那块文字区。
+ * 这一层不依赖 TouchGFX, 也不碰任何硬件外设 —— 只做"跳变表 → 一串字节"这件事。
+ *
+ * ── 为什么能在跳变表上解码 (而不是要原始采样缓冲) ──
+ * log_rec_t 存的是"变化之后的完整电平" (见 sharedconfig.h), 两个跳变之间电平
+ * 恒定, 所以**任意时刻的电平都能精确还原** —— 对二值数字线来说跳变表是无损的。
+ * 原始采样缓冲做不到这件事: 它只有 32 KB 双缓冲, 早被 DMA 绕圈盖掉了。
+ *
+ * ── 位宽从哪来 ──
+ * 用 LOG_CTRL->fs_hz (CM4 用 DWT 实测发布的采样率), 不是标称的 20 MHz。fs_hz
+ * 为 0 (CM4 还没发布过) 时才退到标称值。20 MSa/s 下 9600 baud 一位 = 2083 个
+ * 采样点, 115200 baud 一位 = 174 个 —— 都远够解码。
+ *
+ * ── 什么时候能解 ──
+ * 只有采集**停了**才能解: 采集期间记录表还在被半帧中断追加, 读出来是半截的。
+ * 这一条在 LOG_Analyze_Run() 的入口挡着, 调用方不用自己判。
+ *
+ * ── 配置从哪来 ──
+ * LOG_Analyze_SetConfig() 是唯一的写入口, 只有 Logic_Setting 屏按下 Save 才走
+ * 这条路。Cancel 不调它, 所以本次改动不生效 —— 这正是要的语义。
+ * ========================================================================= */
+
+/* 协议 —— 下标就是设置屏模式表的顺序, 必须和 Model.hpp 的 LOG_PROTO_* 对得上
+ * (Model.cpp 里有一条 static_assert 看着它们)。 */
+#define LOG_ANA_UART          0u
+#define LOG_ANA_I2C           1u
+#define LOG_ANA_SPI           2u
+#define LOG_ANA_CAN           3u
+#define LOG_ANA_PROTO_COUNT   4u
+
+/* UART 校验。顺序就是设置屏候选值表的顺序 (none / odd / even)。 */
+#define LOG_UART_PARITY_NONE  0u
+#define LOG_UART_PARITY_ODD   1u
+#define LOG_UART_PARITY_EVEN  2u
+
+/* UART 一帧怎么切 —— 全部是**用户可配项**, 和设置屏 box2 那四行一一对应。 */
+typedef struct {
+    uint32_t baud;      /* 9600 / 38400 / 115200 */
+    uint8_t  data_bits; /* 7 / 8 */
+    uint8_t  stop_x10;  /* 停止位 ×10: 10 = 1 位, 15 = 1.5 位, 20 = 2 位 */
+    uint8_t  parity;    /* LOG_UART_PARITY_* */
+    uint8_t  rx_ch;     /* 逻辑通道 0..7 (UART 接线约定 CH1 收 RX, 所以是 0) */
+} log_ana_uart_cfg_t;
+
+/* 一条解出来的帧。
+ *
+ * 四种协议共用这一种条目, 而不是各写各的: Model / View / 格式化那一整条通路
+ * 只认这一个结构, 以后加 I2C/SPI/CAN 时它们一行都不用改 —— 只是往 union 里
+ * 加一个结构、往 Run() 里加一个分支、往格式化里加一种排法。
+ *
+ * UART 只用到 data[0] 一个字节; 12 是给 CAN (ID + 8 字节数据) 留的位置。 */
+#define LOG_ANA_ITEM_MAX   12u
+
+typedef struct {
+    uint32_t ts;                      /* 该帧第一个跳变的采样序号 */
+    uint8_t  proto;                   /* LOG_ANA_* */
+    uint8_t  flags;                   /* LOG_ANA_IT_* */
+    uint8_t  len;                     /* data[] 有效字节数 */
+    uint8_t  aux;                     /* 协议相关: I2C = 这一字节归属的 7 位地址,
+                                       * CAN = DLC。见下面各协议的说明 */
+    uint8_t  data[LOG_ANA_ITEM_MAX];
+} log_ana_item_t;
+
+#define LOG_ANA_IT_ERR  0x01u   /* 帧本身有问题 (UART: 校验位对不上) */
+#define LOG_ANA_IT_GAP  0x02u   /* 帧的时间里跨过丢帧区间, 内容不可信 */
+
+/* ---- I2C 专用 (proto == LOG_ANA_I2C) ----
+ *
+ * I2C 是**一个字节一条**: 起始位之后每 9 个 SCL 上升沿就是一个字节 + 它的应答位,
+ * 一条刚好装进 data[0]。地址不单独占一条 —— 它就是这一段的第一个字节, 只是多
+ * 打了个 ADDR 标记; 后面每个数据字节的 aux 里存着"我属于哪个地址", 所以就算
+ * 显示时按地址分了行, 单独看一条也能知道它是谁的数据。
+ *
+ * 地址那一条显示出来是 [50 w] 这种 (地址 + 方向), 而不是它在线上的原样 (0xA0)。
+ * 两者等价, 前者是给人看的。 */
+#define LOG_ANA_IT_I2C_ADDR   0x10u   /* 这一条是地址字节 (一段里的第一个) */
+#define LOG_ANA_IT_I2C_RD     0x20u   /* 地址字节的 R/W 位 = 1 (读) */
+#define LOG_ANA_IT_I2C_NACK   0x40u   /* 这一字节没被应答 (第 9 位是 1) */
+
+/* aux 的"还不知道属于哪个地址"。7 位地址只占 0..127, 所以 0xFF 是安全的哨兵。 */
+#define LOG_ANA_I2C_NOADDR    0xFFu
+
+/* 解出来的帧数上限。到顶就截断, 剩下的不存 (log_ana_diag_trunc 记一笔)。
+ *
+ * 512 是按菜屏上那块文字区定的: 白框 (0,91,800,389) + verdana 20 大约放得下
+ * 16 行、每行 22 字节 ≈ 350 字节, 512 已经盖过屏幕能显示的量 —— 再大只是白占
+ * 内存, 用户也看不到。 */
+#define LOG_ANA_MAX_ITEMS  512u
+
+/* 一次解码需要的全部配置。现在 union 里只有 UART 一份, 加协议时才长出来。 */
+typedef struct {
+    uint8_t proto;          /* LOG_ANA_* */
+    uint8_t rsvd[3];        /* 补齐 + 以后要加的标记位 */
+    union {
+        log_ana_uart_cfg_t uart;
+    } u;
+} log_ana_cfg_t;
+
+/**
+ * 一次性初始化: 配置回到"默认 UART + 设置屏候选值里第一个"。
+ *
+ * 在 Model 的构造函数里调 (那时还没进 main, 但这一层不碰任何硬件, 安全)。
+ */
+void LOG_Analyze_Init(void);
+
+/**
+ * 收下一份新配置。**只有 Logic_Setting 屏按下 Save 才调**。
+ *
+ * 传 0 或者 proto 越界一律忽略 (配置保持原样), 不会读到联合体外面。
+ */
+void LOG_Analyze_SetConfig(const log_ana_cfg_t *cfg);
+
+/** 取当前生效的配置。传 0 就直接返回。 */
+void LOG_Analyze_GetConfig(log_ana_cfg_t *out);
+
+/**
+ * 现在这一刻, 解码的前提够了没有。
+ *
+ * 判据和 LOG_Analyze_Run() 里那句一模一样: 采集停了 + 记录表冻结 + 真有跳变
+ * 可解。**0 和"解出 0 条"是两件事** —— 这一条问的是"能不能解", Run 的返回值
+ * 说的是"解出来几条", 记录表就绪但一条合法帧都没有的时候是"能解, 0 条"。
+ *
+ * Model::tick 拿它决定"现在就解"还是"再等一拍": 用户点进 Logic_Data 屏的时候
+ * 采集完全可能还在跑 (或者干脆还没采过), 那时候不能解 —— 记录表还在变, 解出来
+ * 的是半截数据。该做的是把请求**挂在那儿**, 每个 tick 问一次, 等它稳定。
+ */
+uint8_t LOG_Analyze_Ready(void);
+
+/**
+ * 解一次码, 把结果整体覆盖掉, 返回解出几条。
+ *
+ * 下面这几种情况一律解出 0 条 (结果被清空), 不会保留上一次的:
+ *   - 采集还在跑 (记录表还在变, 见文件头)
+ *   - 还没采过 (记录条数 <= 1, 也就是只有记录 0 那条起点电平)
+ *   - 采样率拿不到 (fs_hz = 0 且标称值兜不住)
+ *
+ * 现在从 Model::tick() 里同步调 (和 LOG_Trace_Poll 并排)。这一层刻意不假设
+ * 自己在哪个上下文跑 —— 以后实测发现它太慢、要搬到独立 RTOS 任务里去的时候,
+ * 改的只是"谁来调它", 这个函数本身不用动。
+ *
+ * 重入安全: 内部只写自己的静态区, 不碰 logic_trace.c 的状态。
+ */
+uint32_t LOG_Analyze_Run(void);
+
+/**
+ * 取上一次 Run 的结果 (只读, 不用释放)。*count 收条数, 传 0 就不写。
+ *
+ * 返回的指针指向这一层内部的静态区 —— **下一次 Run / Clear 会把它改掉**。
+ * 现在解码和读都在 GUI 任务里, 天然不会打架; 以后解码搬到独立任务时, 这里
+ * 要加一层"工作缓冲 → 发布缓冲"的拷贝 (注释会跟着改)。
+ */
+const log_ana_item_t *LOG_Analyze_GetItems(uint32_t *count);
+
+/** 丢掉解码结果, 回到"还没解过"。Logic_Data 屏的 Cancel 走这条路。 */
+void LOG_Analyze_Clear(void);
+
+/* ---- 诊断 ---- */
+
+/** 最近一次 Run 解出几条 (和 LOG_Analyze_Run 的返回值同一个数) */
+extern volatile uint32_t log_ana_diag_items;
+/** 最近一次 Run 花的 CPU 周期数 (DWT)。÷ 480 就是微秒 */
+extern volatile uint32_t log_ana_diag_cyc;
+/** 最近一次 Run 里内容不可信的条目数 (打了 LOG_ANA_IT_GAP 的)。
+ *  含义随协议略不同: UART 是"帧头撞上丢帧区间、整帧放弃"的数量, I2C 是"这一
+ *  字节所在的这一段的采样有缺口"的数量。非 0 都说明记录表在采集中途满过。 */
+extern volatile uint32_t log_ana_diag_gap;
+/** 最近一次 Run 因为条目到顶而没存下来的帧数 (非 0 = 结果被截断了) */
+extern volatile uint32_t log_ana_diag_trunc;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

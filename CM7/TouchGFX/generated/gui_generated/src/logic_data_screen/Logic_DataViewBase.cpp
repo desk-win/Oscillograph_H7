@@ -36,6 +36,14 @@ Logic_DataViewBase::Logic_DataViewBase() :
     box2.setPosition(0, 91, 800, 389);
     box2.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
     add(box2);
+
+    logic_dataarea.setPosition(0, 91, 800, 389);
+    logic_dataarea.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
+    logic_dataarea.setLinespacing(0);
+    logic_dataareaBuffer[0] = 0;
+    logic_dataarea.setWildcard(logic_dataareaBuffer);
+    logic_dataarea.setTypedText(touchgfx::TypedText(T___SINGLEUSE_317X));
+    add(logic_dataarea);
 }
 
 Logic_DataViewBase::~Logic_DataViewBase()

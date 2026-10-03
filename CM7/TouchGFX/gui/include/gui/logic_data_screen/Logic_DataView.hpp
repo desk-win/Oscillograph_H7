@@ -11,6 +11,18 @@ public:
     virtual ~Logic_DataView() {}
     virtual void setupScreen();
     virtual void tearDownScreen();
+
+    /**
+     * 把解码结果摆到白框里那块文字区上 (Presenter 转发 ModelListener 的回调,
+     * setupScreen 也直接调它一次)。
+     *
+     * count == 0 就是清空 —— 不是"保持上一次的"。
+     *
+     * 现在只认 UART (每条一个字节); 加协议时改的是这一个函数 (按 items[k].proto
+     * 分派不同的排法)。
+     */
+    void showLogicData(const log_ana_item_t* items, uint32_t count);
+
 protected:
     /**
      * Cancel 按键的回调。

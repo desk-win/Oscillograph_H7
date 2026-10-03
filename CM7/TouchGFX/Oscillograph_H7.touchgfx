@@ -1010,6 +1010,19 @@
               "Green": 255,
               "Blue": 255
             }
+          },
+          {
+            "Type": "TextArea",
+            "Name": "logic_dataarea",
+            "Y": 91,
+            "Width": 800,
+            "Height": 389,
+            "TextId": "__SingleUse_317X",
+            "TextRotation": "0",
+            "Wildcard1": {
+              "UseBuffer": true,
+              "BufferSize": 1024
+            }
           }
         ],
         "Interactions": [

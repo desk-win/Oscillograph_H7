@@ -9,6 +9,7 @@
 #include <gui/logic_data_screen/Logic_DataPresenter.hpp>
 #include <touchgfx/widgets/Box.hpp>
 #include <touchgfx/widgets/ButtonWithLabel.hpp>
+#include <touchgfx/widgets/TextAreaWithWildcard.hpp>
 
 class Logic_DataViewBase : public touchgfx::View<Logic_DataPresenter>
 {
@@ -30,6 +31,13 @@ protected:
     touchgfx::ButtonWithLabel cancel;
     touchgfx::ButtonWithLabel save;
     touchgfx::Box box2;
+    touchgfx::TextAreaWithOneWildcard logic_dataarea;
+
+    /*
+     * Wildcard Buffers
+     */
+    static const uint16_t LOGIC_DATAAREA_SIZE = 1024;
+    touchgfx::Unicode::UnicodeChar logic_dataareaBuffer[LOGIC_DATAAREA_SIZE];
 
 private:
 

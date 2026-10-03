@@ -48,12 +48,55 @@ const TEXTS VAL_SPI_LEVEL[2]   = { T_VAL1, T_VAL0 };
 const TEXTS VAL_SPI_CS[2]      = { T_VALHIGH, T_VALLOW };
 const TEXTS VAL_CAN_BAUD[3]    = { T_VAL125K, T_VAL250K, T_VAL500K };
 
+/* ---- ③ 候选值下标 → 真值 ---------------------------------------------------
+ *
+ * ②里那些 VAL_* 管的是"屏幕上写哪几个字", 这里这几张管的是"解码层要什么数"。
+ * 两张表按同一个下标一一对齐, 所以每对下面压了一句 static_assert —— 以后往
+ * VAL_UART_BAUD 里插一档波特率而忘了改这边, 是编译不过, 而不是拿错的波特率去
+ * 解、解出一屏乱码来。
+ *
+ * 翻表放在这一层, 而不是 Model 或者 logic_analyze: 候选值的顺序本来就是设置屏
+ * 的东西 (它要拿文本 id 去写字), 别处不该再存一份。(Model.hpp 里那段说的。)
+ */
+const uint32_t UART_BAUD_VAL[3]   = { 9600u, 38400u, 115200u };
+const uint8_t  UART_STOP_VAL[3]   = { 10u, 15u, 20u };   /* 停止位 ×10 = 1 / 1.5 / 2 位 */
+const uint8_t  UART_DATA_VAL[2]   = { 7u, 8u };          /* 数据位个数 */
+const uint8_t  UART_PARITY_VAL[3] = { LOG_UART_PARITY_NONE,
+                                      LOG_UART_PARITY_ODD,
+                                      LOG_UART_PARITY_EVEN };
+
+/* 几个元素 —— 给下面那堆 static_assert 用的。 */
+template <typename T, uint32_t N>
+constexpr uint32_t nElem(const T (&)[N])
+{
+    return N;
+}
+
+static_assert(nElem(UART_BAUD_VAL)   == nElem(VAL_UART_BAUD),   "波特率: 文本表和真值表条数对不上");
+static_assert(nElem(UART_STOP_VAL)   == nElem(VAL_UART_STOP),   "停止位: 文本表和真值表条数对不上");
+static_assert(nElem(UART_DATA_VAL)   == nElem(VAL_UART_DATA),   "数据位: 文本表和真值表条数对不上");
+static_assert(nElem(UART_PARITY_VAL) == nElem(VAL_UART_PARITY), "校验位: 文本表和真值表条数对不上");
+
 struct ProtoOptRow
 {
     TEXTS         label;    /* 选项名 ("baud" / "CPOL" ...) */
     const TEXTS*  values;   /* 候选值文本表 */
     uint8_t       nvalues;  /* 候选值有几个 */
 };
+
+/* ROWS_UART 的行号。
+ *
+ * 按草稿翻真值时是按下标去取的, 用名字比用 0/1/2/3 稳 —— 想换行的顺序, 改这里
+ * 和下面那张表的排列就够了, saveCallbackHandler 里不用动。 */
+enum
+{
+    ROW_UART_BAUD = 0,
+    ROW_UART_STOP,
+    ROW_UART_DATA,
+    ROW_UART_PARITY,
+    ROW_UART_COUNT
+};
+static_assert(ROW_UART_COUNT == 4, "ROWS_UART 的行数改了, 这个枚举也要跟着改");
 
 /* 每种协议要配的几行, 从 box2 最上面那行 (setting1) 往下排。 */
 const ProtoOptRow ROWS_UART[4] =
@@ -126,6 +169,8 @@ Logic_SettingView::Logic_SettingView()
     : modeSwitchCallback(this, &Logic_SettingView::modeSwitchCallbackHandler),
       rowSwitchCallback(this, &Logic_SettingView::rowSwitchCallbackHandler),
       valueSwitchCallback(this, &Logic_SettingView::valueSwitchCallbackHandler),
+      saveCallback(this, &Logic_SettingView::saveCallbackHandler),
+      cancelCallback(this, &Logic_SettingView::cancelCallbackHandler),
       selRow(0u)
 {
 
@@ -135,11 +180,23 @@ void Logic_SettingView::setupScreen()
 {
     Logic_SettingViewBase::setupScreen();
 
+    /* ---- 第一件事: 已提交的配置整个拷进草稿 ----
+     *
+     * 必须排在下面摆界面之前 —— updateProtoMode() 读的就是草稿。上一次进来改了
+     * 没按 Save 就退出的话草稿还是脏的, 不覆盖就会把上次作废的改动又摆到屏上。 */
+    presenter->beginLogicEdit();
+
     /* ViewBase 里那三个按键只有外观没有 interaction, 这里给它们接上。
      * setupScreen() 每次进这个界面都会被调, setAction 是幂等的。 */
     mode_switch.setAction(modeSwitchCallback);
     upordown.setAction(rowSwitchCallback);
     leftorright.setAction(valueSwitchCallback);
+
+    /* Save / Cancel 在 ViewBase 里是配了 interaction 的 (两句一模一样的空跳转),
+     * 所以这里不只是"接管", 是"换掉" —— 跳转那句得在两个 handler 里自己补回来。
+     * (和 Logic_DataView 里 cancel 的做法一样。) */
+    Save.setAction(saveCallback);
+    Cancel.setAction(cancelCallback);
 
     /* 按 Model 的模式摆一次 —— 摆这一下是必须的: 切屏不改模式, 而且配置的取值
      * 也存在 Model 里, 从别的屏切过来时屏上留着的还是上一次写的那几个字。
@@ -207,6 +264,60 @@ void Logic_SettingView::valueSwitchCallbackHandler(const touchgfx::AbstractButto
 
     presenter->setLogicCfgValue(selRow, next);
     renderSettings();
+}
+
+void Logic_SettingView::saveCallbackHandler(const touchgfx::AbstractButton& src)
+{
+    if (&src != &Save)
+    {
+        return;
+    }
+
+    const uint32_t mode = presenter->getLogicProtoMode();
+
+    /* 先把整块清零再填。rsvd 那几个字节和 UART 以外的联合成员都留着 0 ——
+     * 以后加 I2C 之类的协议, 那几个字段也得是明确的 0, 不能是栈上的旧东西。 */
+    log_ana_cfg_t cfg = {};
+    cfg.proto = (uint8_t)mode;
+
+    if (mode == LOG_PROTO_UART)
+    {
+        /* 按下标取真值。下标理论上已经被 renderSettings() 那边按 nvalues 兜过
+         * 越界, 这里再兜一道 —— 表被写坏时读表外是查不出来的那种错。 */
+        const uint8_t b = presenter->getLogicCfgValue(ROW_UART_BAUD);
+        const uint8_t s = presenter->getLogicCfgValue(ROW_UART_STOP);
+        const uint8_t d = presenter->getLogicCfgValue(ROW_UART_DATA);
+        const uint8_t p = presenter->getLogicCfgValue(ROW_UART_PARITY);
+
+        cfg.u.uart.baud      = UART_BAUD_VAL  [b < nElem(UART_BAUD_VAL)   ? b : 0u];
+        cfg.u.uart.stop_x10  = UART_STOP_VAL  [s < nElem(UART_STOP_VAL)   ? s : 0u];
+        cfg.u.uart.data_bits = UART_DATA_VAL  [d < nElem(UART_DATA_VAL)   ? d : 0u];
+        cfg.u.uart.parity    = UART_PARITY_VAL[p < nElem(UART_PARITY_VAL) ? p : 0u];
+
+        /* 接线约定: UART 的 RX 接在 CH1 上, 也就是通道 0 (见文件头 ①)。
+         * 这个不是这里能配的东西, 所以写死。 */
+        cfg.u.uart.rx_ch     = 0u;
+    }
+    /* I2C / SPI / CAN 这一轮只把模式记下来 —— 解码层那三种还没实现
+     * (LOG_Analyze_Run 现在只认 UART)。真值那几个字段留在 0, 等那边做了再按各自
+     * 的表填。 */
+
+    presenter->commitLogicConfig(cfg);
+
+    application().gotoLogicScreenSlideTransitionEast();
+}
+
+void Logic_SettingView::cancelCallbackHandler(const touchgfx::AbstractButton& src)
+{
+    if (&src != &Cancel)
+    {
+        return;
+    }
+
+    /* 这里**什么都不用回滚**: 这些改动从头到尾只写在草稿上, 已提交那份没碰过,
+     * 解码层那份也没碰过。草稿就让它脏着 —— 下次进这一屏 beginLogicEdit() 会整个
+     * 覆盖掉。所以只剩跳转一件事。 */
+    application().gotoLogicScreenSlideTransitionEast();
 }
 
 void Logic_SettingView::updateProtoMode(uint32_t mode)

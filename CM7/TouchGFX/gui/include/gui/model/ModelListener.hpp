@@ -59,6 +59,26 @@ public:
     }
 
     /**
+     * 协议解码的结果出来了, 该把 Logic_Data 屏上那块文字区重写一遍。
+     *
+     * items 指到 logic_analyze.c 内部的静态区, **下一次解码或者 Clear 就会把
+     * 它改掉** —— 所以收到就当场把要显示的字格式化到自己的缓冲里, 不要把指针
+     * 存起来 (和 logicUpdated 传列缓冲是同一个约定: 处理是同步做完的)。
+     *
+     * count 是条数, **0 表示这次没东西可显示** (采集还在跑 / 还没采过 / 这一轮
+     * 一条都没解出来), View 收到就把文字区清空 —— 不是"保持上一次的"。
+     *
+     * 一次性回调: 只有真的解完一轮才发, 不是每个 tick。同一轮采集里反复进出
+     * Logic_Data 屏不会再发 (那一轮早就解过了), 那一次屏幕上该显示什么由
+     * View::setupScreen 自己取 (Model::getLogicItems)。
+     */
+    virtual void logicDataUpdated(const log_ana_item_t* items, uint32_t count)
+    {
+        (void)items;
+        (void)count;
+    }
+
+    /**
      * 编码器转过了。delta 是自上次调用以来的**净格数**, 正 = 顺时针。
      *
      * 默认空实现 —— 只有想用编码器的屏才覆盖它 (目前是逻辑分析仪, 调时基)。

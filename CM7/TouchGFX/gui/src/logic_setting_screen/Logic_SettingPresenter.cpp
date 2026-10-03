@@ -42,3 +42,13 @@ void Logic_SettingPresenter::setLogicCfgValue(uint32_t row, uint8_t value)
 {
     model->setLogicCfgValue(model->getLogicProtoMode(), row, value);
 }
+
+void Logic_SettingPresenter::beginLogicEdit()
+{
+    model->beginLogicEdit();
+}
+
+void Logic_SettingPresenter::commitLogicConfig(const log_ana_cfg_t& cfg)
+{
+    model->commitLogicConfig(cfg);
+}

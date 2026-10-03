@@ -28,9 +28,15 @@
  * ========================================================================= */
 
 Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
-                 logicProtoMode(LOG_PROTO_UART)
+                 committedProtoMode(LOG_PROTO_UART), draftProtoMode(LOG_PROTO_UART),
+                 logicDecodeReq(false), logicDecodedSeq(0u)
 {
     OSC_Probe_Init();
+
+    /* 解码层的默认配置 (UART + 设置屏候选值里第一个)。必须赶在任何人调
+     * LOG_Analyze_Run() 之前跑过 —— 那要等到用户点进 Logic_Data 屏了, 所以
+     * 这儿是最早也最合适的位置。它不碰任何硬件, 在 main() 之前跑是安全的。 */
+    LOG_Analyze_Init();
 
     for (int ch = 0; ch < 2; ch++)
     {
@@ -48,12 +54,16 @@ Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
 
     /* 协议配置的取值全给 0 —— 也就是说每种协议开机都用候选值列表里第一个:
      * 9600 / 1 停止位 / 7 位数据 / 无校验 / CPOL=1 / CPHA=1 / CS=high / 125k。
-     * 那份候选值列表在设置屏的 .cpp 里, 想看全貌去那儿。 */
+     * 那份候选值列表在设置屏的 .cpp 里, 想看全貌去那儿。
+     *
+     * 已提交和草稿两份都清 —— 开机时本来就没人在编辑, 两份必须是一致的。
+     * (这两份和 LOG_Analyze_Init() 那份默认值也是同一个东西, 三方对得上。) */
     for (uint32_t m = 0; m < LOG_PROTO_COUNT; m++)
     {
         for (uint32_t r = 0; r < LOG_PROTO_CFG_ROWS; r++)
         {
-            logicCfgVal[m][r] = 0u;
+            committedCfgVal[m][r] = 0u;
+            draftCfgVal[m][r]     = 0u;
         }
     }
 }
@@ -107,7 +117,7 @@ uint8_t Model::getLogicCfgValue(uint32_t mode, uint32_t row) const
     {
         return 0u;
     }
-    return logicCfgVal[mode][row];
+    return draftCfgVal[mode][row];
 }
 
 void Model::setLogicCfgValue(uint32_t mode, uint32_t row, uint8_t value)
@@ -116,13 +126,72 @@ void Model::setLogicCfgValue(uint32_t mode, uint32_t row, uint8_t value)
     {
         return;
     }
-    logicCfgVal[mode][row] = value;
+    draftCfgVal[mode][row] = value;
+}
+
+void Model::beginLogicEdit()
+{
+    /* 已提交 → 草稿, 整个覆盖。
+     *
+     * 每次进设置屏都要走一遍: 上一次在这屏上改了没 Save (按了 Cancel) 的话,
+     * 草稿还是脏的 —— 不覆盖就会把上一次作废掉的改动又摆回屏幕上, 看起来像
+     * "Cancel 没生效"。
+     *
+     * 拷的是**下标**那一份, 不碰 logic_analyze.c 的真值那份 —— 编辑期间解码
+     * 层该用什么配置还是什么配置 (这正是"没 Save 就不生效"的落点)。 */
+    draftProtoMode = committedProtoMode;
+
+    for (uint32_t m = 0; m < LOG_PROTO_COUNT; m++)
+    {
+        for (uint32_t r = 0; r < LOG_PROTO_CFG_ROWS; r++)
+        {
+            draftCfgVal[m][r] = committedCfgVal[m][r];
+        }
+    }
+}
+
+void Model::commitLogicConfig(const log_ana_cfg_t& cfg)
+{
+    /* 草稿转正。整份拷 (所有模式、所有行), 不是只拷当前这一个模式 —— 用户可能
+     * 在这个屏上把四种模式挨个配了一遍才按 Save。 */
+    committedProtoMode = draftProtoMode;
+
+    for (uint32_t m = 0; m < LOG_PROTO_COUNT; m++)
+    {
+        for (uint32_t r = 0; r < LOG_PROTO_CFG_ROWS; r++)
+        {
+            committedCfgVal[m][r] = draftCfgVal[m][r];
+        }
+    }
+
+    /* 真值那份推给解码层 —— 它才是解码唯一认的。cfg 是 View 拿这个草稿翻出来
+     * 的 (翻表在那边, 候选值的顺序本来就是它的约定), 和上面那份不会不一致。 */
+    LOG_Analyze_SetConfig(&cfg);
+}
+
+void Model::requestLogicDecode()
+{
+    /* 只置记号。解码在 Model::tick 里做 —— 那是几毫秒到几十毫秒的活, 塞在
+     * setupScreen 里会把切屏动画堵住 (切换是同步做完的)。 */
+    logicDecodeReq = true;
+}
+
+const log_ana_item_t* Model::getLogicItems(uint32_t* count) const
+{
+    return LOG_Analyze_GetItems(count);
 }
 
 void Model::clearLogicData()
 {
     /* 采集中的话这里面先停 (等于替用户拨了一次开关), 然后记录 / 结果全清。 */
     LOG_Trace_Clear();
+
+    /* 解码结果一起丢 —— 它和记录是同一轮采集的产物, 记录没了它就没有意义。
+     *
+     * 不丢的话会留下一个很别扭的状态: logicDecodedSeq 还等于这一代的记号, 于是
+     * 下次进 Logic_Data 屏不会重新解 (记号没变), 屏幕上却把上一轮解出来的字节
+     * 又摆了一遍 —— 而那些字节对应的波形已经被 Cancel 掉了。 */
+    LOG_Analyze_Clear();
 
     /* Model 自己这两片也要清 —— 它们才是 View 直接读的那一份。不清的话,
      * 从 Logic_Data 切回 Logic 时 setupScreen 拿到的 ncols 还是旧的, 屏幕上
@@ -266,6 +335,51 @@ void Model::tick()
                 modelListener->logicUpdated(logicLevel, logicChange, logicNcols);
             }
         }
+    }
+
+    /* ---- 协议解码 ----
+     *
+     * 排在 LOG_Trace_Poll() 后面: Poll 可能刚刚归约完 (采集是在中断里停的, 停完
+     * 要等这一拍才收尾), 而解码要的前提是"采集已经停了"。那个前提
+     * LOG_Trace_GetRecs 自己会判, 所以顺序上不欠什么, 排在后面只是读起来顺。
+     *
+     * **必须在下面那个"两路都停了就提前返回"的守卫之前**: 用户点进 Logic_Data
+     * 屏看数据的时候, 采集恰恰是停着的 —— 排在守卫后面的话这一帧永远走不到这儿,
+     * 屏幕上一直是空的。(和上面 LOG_Trace_Poll 同一个理由, 那一段注释也说了。)
+     *
+     * 开销: 没请求过解码时就是一个 bool 判断, 每个 tick 都跑得起。 */
+    if (logicDecodeReq)
+    {
+        /* 记号比的是 LOG_Trace_GetResultSeq(): 每扫完一个半帧加一, 所以"采集停着
+         * 不动"就等于"这个数不动" —— 同一轮采集是这个数, 新一轮采集就是另一个数。
+         *
+         * seq == 0 是"这一次上电还没扫完过半帧" (没采过)。
+         *
+         * 这一支要**先清请求**: 这两种情况都没有可等的东西 —— 还没采过的话, 用户
+         * 想采就得先退出去开那个开关, 回来时会重新请求一次; 已经解过的这一代,
+         * 屏幕上该显示什么 View::setupScreen 自己取 (Model::getLogicItems)。 */
+        const uint32_t seq = LOG_Trace_GetResultSeq();
+
+        if (seq == 0u || seq == logicDecodedSeq)
+        {
+            logicDecodeReq = false;
+        }
+        else if (LOG_Analyze_Ready() != 0u)
+        {
+            const uint32_t cnt = LOG_Analyze_Run();
+            logicDecodedSeq = seq;
+            logicDecodeReq = false;
+
+            /* 先记标记再通知: 万一回调里又请求了一次解码 (现在没有这种屏, 但
+             * 以后要是加了"解码完自动再解一遍"之类的), 也不会重解同一代。 */
+            if (modelListener != 0)
+            {
+                modelListener->logicDataUpdated(LOG_Analyze_GetItems(0), cnt);
+            }
+        }
+        /* 剩下的只有一种: 有新的一代, 但采集还在跑 (记录表还在变, 解出来是半截
+         * 数据)。请求**挂着不解**, 下一个 tick 再问一次 —— 用户点进数据屏的时候
+         * 开关很可能还开着, 就是要等它停稳。 */
     }
 
     /* 两个通道都停了才没什么可做。只要还有一路在跑, 下面就得照常走 ——

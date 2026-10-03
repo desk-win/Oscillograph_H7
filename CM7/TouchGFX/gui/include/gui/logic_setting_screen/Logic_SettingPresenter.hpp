@@ -53,6 +53,21 @@ public:
 
     void setLogicCfgValue(uint32_t row, uint8_t value);
 
+    /**
+     * 进这一屏: 已提交的配置整个拷进草稿, 从这里开始改的都是草稿 (Model.hpp 里
+     * 那一大段说的)。View::setupScreen 的第一件事 —— 必须赶在摆界面之前, 不然
+     * 摆出来的是上一次没 Save 的那份脏草稿。
+     */
+    void beginLogicEdit();
+
+    /**
+     * 按了 Save: 草稿 → 已提交, 并且整份推给解码层 (logic_analyze.c)。
+     *
+     * cfg 由 View 按草稿翻出来 —— 候选值下标到真值的翻表在它那儿 (顺序只有它
+     * 知道)。这一层不掺和, 只是转交。
+     */
+    void commitLogicConfig(const log_ana_cfg_t& cfg);
+
 private:
     Logic_SettingPresenter();
 

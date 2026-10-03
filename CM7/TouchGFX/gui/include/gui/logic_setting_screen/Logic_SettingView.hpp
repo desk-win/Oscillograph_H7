@@ -51,6 +51,29 @@ protected:
     void valueSwitchCallbackHandler(const touchgfx::AbstractButton& src);
 
     /**
+     * Save (确认这次改的配置) 的回调。
+     *
+     * 这一屏改的全程都只是 Model 里的**草稿** (见 Model.hpp 那一大段), 按到这里
+     * 才把草稿翻成真值推给解码层 —— 翻表是本文件的事 (候选值的顺序只有这里知道)。
+     *
+     * 和另外三个按键一样, 用 View 自己的一份 Callback 顶掉 ViewBase 里 generated
+     * 的那个 buttonCallbackHandler: 那里面 Save 和 Cancel 都写死了一句空跳转, 往里
+     * 塞分支的话 Designer 每次重新生成代码都会冲掉。代价是跳转要自己补回来。
+     */
+    touchgfx::Callback<Logic_SettingView, const touchgfx::AbstractButton&> saveCallback;
+    void saveCallbackHandler(const touchgfx::AbstractButton& src);
+
+    /**
+     * Cancel (作废这次改的配置) 的回调。
+     *
+     * 什么都不用做: 改的一直是草稿, 已提交那份没动过, 解码层那份也没动过。下次
+     * 进这一屏 beginLogicEdit() 会把草稿整个覆盖掉, 上次作废的改动不会漏出来。
+     * 所以这里只剩跳转一件事。
+     */
+    touchgfx::Callback<Logic_SettingView, const touchgfx::AbstractButton&> cancelCallback;
+    void cancelCallbackHandler(const touchgfx::AbstractButton& src);
+
+    /**
      * 当前选中 box2 里的第几行 (从 0 数)。
      *
      * 纯 UI 状态, 不进 Model —— 换个界面再回来, 或者切了模式, 都从第 0 行重新开始

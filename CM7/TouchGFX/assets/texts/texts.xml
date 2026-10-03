@@ -6,6 +6,19 @@
   <Texts>
     <TextGroup Id="Group1" />
     <TextGroup Id="Unsorted">
+      <!--
+        这条不显示在任何控件上, 唯一的作用是往字模里喂字符。
+        TouchGFX 的字体是拿 texts.xml 里这些实文本现生成的, 通配符占位符不算数 ——
+        20 号字原本只有 52 个字符, 连 'f' 和 'F' 都没有, 于是 logic_data 屏上任何
+        半个字节是 0xF 的数据都会画成空白。
+        改这条之前先看 Logic_DataView.cpp 里的 HEX_DIGIT。
+      -->
+      <Text Id="hexDigits" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">0123456789abcdef[]</Translation>
+      </Text>
+      <Text Id="__SingleUse_317X" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
       <Text Id="__SingleUse_MVEX" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">&lt;value&gt;</Translation>
       </Text>
