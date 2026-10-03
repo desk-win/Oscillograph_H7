@@ -81,12 +81,18 @@ static void ctrl_defaults(void)
     osc_ctrl.diag_max_ch2    = 0u;
     osc_ctrl.diag_level_ch2  = 0u;
 
-    /* 模拟前端上电状态: 两路都是 X1。要和 CM4/Core/Src/main.c 里那两句
-     * OSC_Chx_Multiple(1, 1) 对上 —— 那两句是真正动手摆引脚的, 这里只是把
-     * 记账的那一份摆成同一个值, 免得 frontend_poll() 第一轮以为"要改成 X1"
-     * 而多动一次 MUX (无害, 但会让开机的继电器/模拟开关多抖一下)。 */
+    /* 模拟前端上电状态: 两路都是 X1 + 直流。要和 CM4/Core/Src/main.c 里那两句
+     * OSC_Chx_Multiple(1, OSC_COUPLE_DC) 对上 —— 那两句是真正动手摆引脚的, 这里
+     * 只是把记账的那一份摆成同一个值, 免得 frontend_poll() 第一轮以为"要改成
+     * X1/直流"而多动一次 MUX (无害, 但会让开机的继电器/模拟开关多抖一下)。
+     *
+     * 这里也是这两个字段**唯一一次**由 CM4 写: 之后 CM7 是唯一的写者 (见
+     * sharedconfig.h 的单写者约定)。必须在里面写全 —— D2 那块内存在复位时不清,
+     * 漏一个的话 frontend_poll() 会拿着上一轮的残留值去摆耦合脚。 */
     osc_ctrl.cfg_gain_ch1    = 0u;
     osc_ctrl.cfg_gain_ch2    = 0u;
+    osc_ctrl.cfg_dc_ch1      = OSC_COUPLE_DC;
+    osc_ctrl.cfg_dc_ch2      = OSC_COUPLE_DC;
 }
 
 /**
@@ -497,30 +503,62 @@ static void osc_scan_half(uint32_t ch, uint32_t done, uint32_t lag)
 }
 
 /**
-*   @brief 把 CM7 写的那两个放大倍数档位摆到 MUX 引脚上
+*   @brief 档位号 → 倍数: 1 << n (0→X1, 1→X2, ... 7→X128)
+*   @note  越界的当 X1 —— OSC_Chx_Multiple 的 default 分支也是 X1, 两边一致。
+*          先判上界再移位: 直接 1u << g 的话, g = 32 是未定义行为。
+*/
+static uint8_t frontend_mult(uint32_t g)
+{
+    return (uint8_t)((g <= 7u) ? (1u << g) : 1u);
+}
+
+/**
+*   @brief 耦合值 → OSC_Chx_Multiple 的第二个参数
+*   @note  只有正好是 OSC_COUPLE_AC 才算交流, 其余一律直流。这个"非 0 不一定
+*          是直流"的写法是刻意的: 上电默认是直流, 而这两个字段所在的 D2 内存在
+*          复位时不清 —— 万一 CM7 还没写过 (或写坏了), 落到的也是默认的直流,
+*          而不是把探头莫名其妙地切成交流。
+*/
+static uint8_t frontend_dc(uint32_t c)
+{
+    return (uint8_t)((c == OSC_COUPLE_AC) ? OSC_COUPLE_AC : OSC_COUPLE_DC);
+}
+
+/**
+*   @brief 把 CM7 写的放大倍数和交直流耦合摆到引脚上
 *   @note  由 OSC_CH_Poll() 每轮调一次, 见那边的说明。
 */
 static void frontend_poll(void)
 {
-    /* 初值给一个不可能是合法档位的数 —— 保证第一轮必定应用一次, 不依赖
-     * "别处已经把它摆对了"。 */
-    static uint32_t last_ch1 = 0xFFFFFFFFu;
-    static uint32_t last_ch2 = 0xFFFFFFFFu;
+    /* 存的是**已经摆到引脚上的那两个值** (换算之后的倍数和耦合), 不是共享块里
+     * 的原始字段。这样"变了才动"的判据就是"有效状态变了才动": 比如共享块里从
+     * 2 变成 3 (两个都按直流处理) 不会白摆一次引脚。
+     *
+     * 初值 0xFF 是摆不出来的值 (倍数只能是 1..128 的 2 的幂, 耦合只能是 0/1) ——
+     * 保证第一轮必定应用一次, 不依赖"别处已经把它摆对了"。 */
+    static uint8_t last_mult1 = 0xFFu;
+    static uint8_t last_mult2 = 0xFFu;
+    static uint8_t last_dc1   = 0xFFu;
+    static uint8_t last_dc2   = 0xFFu;
 
-    const uint32_t g1 = osc_ctrl.cfg_gain_ch1;
-    const uint32_t g2 = osc_ctrl.cfg_gain_ch2;
+    const uint8_t m1 = frontend_mult(osc_ctrl.cfg_gain_ch1);
+    const uint8_t m2 = frontend_mult(osc_ctrl.cfg_gain_ch2);
+    const uint8_t d1 = frontend_dc(osc_ctrl.cfg_dc_ch1);
+    const uint8_t d2 = frontend_dc(osc_ctrl.cfg_dc_ch2);
 
-    /* 档位号 → 倍数: 1 << n (0→X1, 1→X2, ... 7→X128)。越界的当 X1 ——
-     * OSC_Chx_Multiple 的 default 分支也是 X1, 两边一致。
-     * 先判上界再移位: 直接 1u << g1 的话, g1 = 32 是未定义行为。 */
-    if (g1 != last_ch1) {
-        last_ch1 = g1;
-        OSC_Ch1_Multiple((uint8_t)((g1 <= 7u) ? (1u << g1) : 1u), 1u);
+    /* 两个设置必须一起重摆, 不能各摆各的: OSC_Chx_Multiple 每次调用都会把三根
+     * MUX 地址线**和**耦合脚整个写一遍, 后摆的那个会把先摆的那个抹掉。所以判的
+     * 是"任意一个变了", 传进去的是两个的当前值。 */
+    if (m1 != last_mult1 || d1 != last_dc1) {
+        last_mult1 = m1;
+        last_dc1   = d1;
+        OSC_Ch1_Multiple(m1, d1);
     }
 
-    if (g2 != last_ch2) {
-        last_ch2 = g2;
-        OSC_Ch2_Multiple((uint8_t)((g2 <= 7u) ? (1u << g2) : 1u), 1u);
+    if (m2 != last_mult2 || d2 != last_dc2) {
+        last_mult2 = m2;
+        last_dc2   = d2;
+        OSC_Ch2_Multiple(m2, d2);
     }
 }
 
@@ -532,10 +570,10 @@ static void frontend_poll(void)
 */
 void OSC_CH_Poll(void)
 {
-    /* ---- 模拟前端 (放大倍数) ----
+    /* ---- 模拟前端 (放大倍数 + 交直流耦合) ----
      *
      * MUX 的三根地址线 (A_S0/S1/S2, B_S0) 和耦合脚只在 CM4 的 main.h 里, CM7
-     * 那份连宏都没有 —— 所以"调增益"必须跨核传, 不能各写各的。
+     * 那份连宏都没有 —— 所以"调增益"和"切交直流"都必须跨核传, 不能各写各的。
      *
      * 机制故意做得最笨: 每轮把两个档位读出来和本地旧的比, 变了才动引脚。不加
      * cmd_seq 那套"序号变了才整体重读" —— osc_ctrl_t 里现有的 cfg_trig_* /

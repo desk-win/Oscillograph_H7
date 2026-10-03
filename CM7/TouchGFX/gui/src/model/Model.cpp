@@ -44,11 +44,17 @@ Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
      *
      * 放大倍数在这儿存一份是对的: 它是纯界面状态, CM4 那边只是执行机构。X1 要
      * 和 CM4 ctrl_defaults() 里的 0 (也是 X1) 以及 CM4 main.c 开机那两句
-     * OSC_Chx_Multiple(1, 1) 对上 —— 三处都是 X1, 所以开机不用动任何引脚。 */
+     * OSC_Chx_Multiple(1, OSC_COUPLE_DC) 对上 —— 三处都是 X1, 所以开机不用动任何引脚。
+     *
+     * 交直流耦合同理: 默认直流, 上面那三处也是直流。草稿那份跟着一起给初值,
+     * 免得有人还没进过设置屏就先调了 getOscCoupleDraft() 拿到个 0 (交流)。 */
     for (int c = 0; c < 2; c++)
     {
         oscMode[c] = OSC_MODE_TIME;
         oscGain[c] = OSC_GAIN_DEFAULT;
+
+        committedCouple[c] = OSC_COUPLE_DC;
+        draftCouple[c]     = OSC_COUPLE_DC;
     }
 
     /* 解码层的默认配置 (UART + 设置屏候选值里第一个)。必须赶在任何人调
@@ -337,10 +343,52 @@ void Model::syncOscUi()
      * (frontend_poll)。不推这一下的话表现是"屏幕写着 X1, 实际还是上次那个倍
      * 数"—— 而且怎么转编码器都只在错的基准上加减, 极难查。
      *
+     * 交直流耦合是同一个理由、同一时刻推: 它是跟放大倍数相邻的那一格, 也是
+     * CM4 只在变了才动引脚。推的是**已提交**那份 —— 设置屏上的草稿没按 Save
+     * 之前不该到硬件上去 (也没机会到这里, 推的入口只有一个)。
+     *
      * 时基那边不用推: 档位存在 CM7 自己的 osc_trace 里, 和 CM4 无关。 */
     for (uint32_t c = 0u; c < 2u; c++)
     {
         M7_OSC_SetFrontend(c, oscGain[c]);
+        M7_OSC_SetCoupling(c, committedCouple[c]);
+    }
+}
+
+void Model::beginOscEdit()
+{
+    /* 已提交 → 草稿, 和 beginLogicEdit() 一个道理: 上一次在这屏上拨了没 Save
+     * (按了 Cancel) 的话草稿还是脏的, 不覆盖就会把上一次作废的改动又摆回屏幕上,
+     * 看起来像"Cancel 没生效"。 */
+    for (uint32_t c = 0u; c < 2u; c++)
+    {
+        draftCouple[c] = committedCouple[c];
+    }
+}
+
+uint32_t Model::getOscCoupleDraft(osc_trace_ch_t ch) const
+{
+    return draftCouple[(ch == OSC_TRACE_CH2) ? 1u : 0u];
+}
+
+void Model::setOscCoupleDraft(osc_trace_ch_t ch, uint32_t coup)
+{
+    /* 只有正好是 OSC_COUPLE_AC 才当交流, 其余一律直流 —— 和 CM4 的 frontend_dc()
+     * 判法一致, 这样"存进去什么"和"引脚上是什么"永远是同一个映射。 */
+    draftCouple[(ch == OSC_TRACE_CH2) ? 1u : 0u] =
+        (coup == OSC_COUPLE_AC) ? OSC_COUPLE_AC : OSC_COUPLE_DC;
+}
+
+void Model::commitOscEdit()
+{
+    for (uint32_t c = 0u; c < 2u; c++)
+    {
+        committedCouple[c] = draftCouple[c];
+
+        /* 两路都写, 不管改没改 —— CM4 那边拿旧值比过才动引脚, 多写一次不会让
+         * 耦合脚多抖一下 (和 turnOscEncoder 里那句"值没变就不写"省下的其实只有
+         * 一次跨核写, 这儿不值得为它多一个分支)。 */
+        M7_OSC_SetCoupling(c, committedCouple[c]);
     }
 }
 

@@ -147,6 +147,18 @@ void M7_OSC_Poll(void);
  * 一致"时反而更难查。调用方保证 0..7。 */
 void M7_OSC_SetFrontend(uint32_t ch, uint32_t gain_code);
 
+/* 换某一路的交直流耦合。coup: OSC_COUPLE_DC / OSC_COUPLE_AC (sharedconfig.h)。
+ *
+ * 和 M7_OSC_SetFrontend 是一对: 写的是相邻的两个字段, 由 CM4 的同一个
+ * OSC_Chx_Multiple(倍数, 耦合) 摆到引脚上。
+ *
+ * **为什么是两个函数而不是一个多参数函数**: 这两项由屏幕上的两条不同路径改
+ * (倍数走示波器屏的编码器, 耦合走设置屏), 各自的"只有 Save/编码器动作才写"
+ * 的时机也不一样。合成一个的话, 调倍数的那条路就得把当前的耦合值一起传进来 ——
+ * 而设置屏没按 Save 之前, 耦合值还只是个草稿, 传进来就把"没 Save 不生效"破了。
+ * 分开写则各自只有一个调用点, 草稿漏不出去。 */
+void M7_OSC_SetCoupling(uint32_t ch, uint32_t coup);
+
 #ifdef __cplusplus
 }
 #endif

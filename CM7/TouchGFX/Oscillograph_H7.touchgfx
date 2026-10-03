@@ -1172,6 +1172,90 @@
             },
             "TextRotation": "0",
             "Preset": "alternate_theme\\presets\\button\\regular\\height_50\\medium_rounded_normal.json"
+          },
+          {
+            "Type": "TextArea",
+            "Name": "ch1",
+            "X": 53,
+            "Y": 120,
+            "Width": 58,
+            "Height": 24,
+            "TextId": "__SingleUse_9HS0",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 24,
+              "Green": 200,
+              "Blue": 219
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "dc",
+            "X": 129,
+            "Y": 84,
+            "Width": 29,
+            "Height": 24,
+            "TextId": "__SingleUse_X8H4",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "ac",
+            "X": 247,
+            "Y": 84,
+            "Width": 28,
+            "Height": 24,
+            "TextId": "__SingleUse_8ZWR",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "ch2",
+            "X": 53,
+            "Y": 182,
+            "Width": 58,
+            "Height": 24,
+            "TextId": "__SingleUse_R8IP",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 212,
+              "Green": 180,
+              "Blue": 19
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "ToggleButton",
+            "Name": "ch1_switch",
+            "X": 171,
+            "Y": 115,
+            "Width": 62,
+            "Height": 34,
+            "Pressed": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_on_active.png",
+            "Released": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_off_light.png"
+          },
+          {
+            "Type": "ToggleButton",
+            "Name": "ch2_switch",
+            "X": 171,
+            "Y": 177,
+            "Width": 62,
+            "Height": 34,
+            "Pressed": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_on_action.png",
+            "Released": "__generated\\alternate_theme_images_widgets_togglebutton_small_round_small_off_light.png"
           }
         ],
         "Interactions": [

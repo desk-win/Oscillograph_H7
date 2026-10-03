@@ -32,6 +32,38 @@ OSC_SettingViewBase::OSC_SettingViewBase() :
     save.setLabelColorPressed(touchgfx::Color::getColorFromRGB(255, 255, 255));
     save.setAction(buttonCallback);
     add(save);
+
+    ch1.setXY(53, 120);
+    ch1.setColor(touchgfx::Color::getColorFromRGB(24, 200, 219));
+    ch1.setLinespacing(0);
+    ch1.setTypedText(touchgfx::TypedText(T___SINGLEUSE_9HS0));
+    add(ch1);
+
+    dc.setXY(129, 84);
+    dc.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    dc.setLinespacing(0);
+    dc.setTypedText(touchgfx::TypedText(T___SINGLEUSE_X8H4));
+    add(dc);
+
+    ac.setXY(247, 84);
+    ac.setColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    ac.setLinespacing(0);
+    ac.setTypedText(touchgfx::TypedText(T___SINGLEUSE_8ZWR));
+    add(ac);
+
+    ch2.setXY(53, 182);
+    ch2.setColor(touchgfx::Color::getColorFromRGB(212, 180, 19));
+    ch2.setLinespacing(0);
+    ch2.setTypedText(touchgfx::TypedText(T___SINGLEUSE_R8IP));
+    add(ch2);
+
+    ch1_switch.setXY(171, 115);
+    ch1_switch.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_OFF_LIGHT_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_ON_ACTIVE_ID));
+    add(ch1_switch);
+
+    ch2_switch.setXY(171, 177);
+    ch2_switch.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_OFF_LIGHT_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_TOGGLEBUTTON_SMALL_ROUND_SMALL_ON_ACTION_ID));
+    add(ch2_switch);
 }
 
 OSC_SettingViewBase::~OSC_SettingViewBase()

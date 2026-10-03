@@ -9,6 +9,8 @@
 #include <gui/osc_setting_screen/OSC_SettingPresenter.hpp>
 #include <touchgfx/widgets/Box.hpp>
 #include <touchgfx/widgets/ButtonWithLabel.hpp>
+#include <touchgfx/widgets/TextArea.hpp>
+#include <touchgfx/widgets/ToggleButton.hpp>
 
 class OSC_SettingViewBase : public touchgfx::View<OSC_SettingPresenter>
 {
@@ -29,6 +31,12 @@ protected:
     touchgfx::Box box1;
     touchgfx::ButtonWithLabel cancel;
     touchgfx::ButtonWithLabel save;
+    touchgfx::TextArea ch1;
+    touchgfx::TextArea dc;
+    touchgfx::TextArea ac;
+    touchgfx::TextArea ch2;
+    touchgfx::ToggleButton ch1_switch;
+    touchgfx::ToggleButton ch2_switch;
 
 private:
 

@@ -10,6 +10,10 @@ KEEP extern const uint32_t indicesGb[] TEXT_LOCATION_FLASH_ATTRIBUTE;
 // Remap all strings
 TEXT_LOCATION_FLASH_PRAGMA
 KEEP extern const uint32_t indicesGb[] TEXT_LOCATION_FLASH_ATTRIBUTE = {
+    153, // T___SINGLEUSE_R8IP: "CH2: "
+    374, // T___SINGLEUSE_8ZWR: "AC"
+    380, // T___SINGLEUSE_X8H4: "DC"
+    147, // T___SINGLEUSE_9HS0: "CH1: "
     236, // T___SINGLEUSE_RPMB: "CH2:"
     231, // T___SINGLEUSE_J105: "CH1:"
     28,  // T___SINGLEUSE_UD7V: "<>"
@@ -42,10 +46,10 @@ KEEP extern const uint32_t indicesGb[] TEXT_LOCATION_FLASH_ATTRIBUTE = {
     346, // T_PROTOI2C: "I2C"
     362, // T_PROTOSPI: "SPI"
     310, // T_PROTOCAN: "CAN"
-    377, // T_SIGRX: "RX"
+    383, // T_SIGRX: "RX"
     354, // T_SIGSCL: "SCL"
     358, // T_SIGSDA: "SDA"
-    374, // T_SIGCS: "CS"
+    377, // T_SIGCS: "CS"
     350, // T_SIGSCK: "SCK"
     256, // T_SIGMISO: "MISO"
     261, // T_SIGMOSI: "MOSI"
@@ -55,7 +59,7 @@ KEEP extern const uint32_t indicesGb[] TEXT_LOCATION_FLASH_ATTRIBUTE = {
     127, // T_OPTPARITY: "parity"
     246, // T_OPTCPOL: "CPOL"
     241, // T_OPTCPHA: "CPHA"
-    374, // T_OPTCS: "CS"
+    377, // T_OPTCS: "CS"
     221, // T_VAL9600: "9600"
     141, // T_VAL38400: "38400"
     99,  // T_VAL115200: "115200"

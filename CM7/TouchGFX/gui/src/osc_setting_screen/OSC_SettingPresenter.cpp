@@ -16,3 +16,23 @@ void OSC_SettingPresenter::deactivate()
 {
 
 }
+
+void OSC_SettingPresenter::beginOscEdit()
+{
+    model->beginOscEdit();
+}
+
+uint32_t OSC_SettingPresenter::getOscCoupleDraft(osc_trace_ch_t ch)
+{
+    return model->getOscCoupleDraft(ch);
+}
+
+void OSC_SettingPresenter::setOscCoupleDraft(osc_trace_ch_t ch, uint32_t coup)
+{
+    model->setOscCoupleDraft(ch, coup);
+}
+
+void OSC_SettingPresenter::commitOscEdit()
+{
+    model->commitOscEdit();
+}

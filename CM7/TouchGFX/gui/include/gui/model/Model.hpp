@@ -139,6 +139,42 @@ public:
      */
     void syncOscUi();
 
+    /* =======================================================================
+     * 示波器设置屏正在编辑的那一份 —— 交直流耦合的草稿
+     *
+     * 和下面逻辑分析仪的协议配置是同一套语义 (那一段的说明更细): 改完按下 Save
+     * 才生效, 所以编辑期间动的是草稿。
+     *
+     *   进屏     beginOscEdit()      已提交 → 草稿
+     *   拨开关   改草稿 (setOscCoupleDraft)
+     *   Save     commitOscEdit()     草稿 → 已提交, 并推给 CM4 (M7_OSC_SetCoupling)
+     *   Cancel   什么都不做 —— 草稿就地作废, 下次进屏又被覆盖掉
+     *
+     * 所以"没按 Save 就退出"之后, 硬件上、以及下次进屏摆出来的, 都还是上一次
+     * 提交的那份。这也是为什么草稿和已提交要分成两个数组: 合成一个的话, 拨一下
+     * 开关就把已提交那份改了, Cancel 再想恢复也没有第二份可比对。
+     *
+     * 耦合值就是 OSC_COUPLE_DC / OSC_COUPLE_AC (sharedconfig.h)。默认直流, 必须
+     * 和 CM4 的 ctrl_defaults() 和 main.c 里那两句一致。
+     * ======================================================================= */
+
+    /** 进设置屏时调一次 (View::setupScreen 的第一件事): 已提交 → 草稿。 */
+    void beginOscEdit();
+
+    /** 草稿: 这一路现在是直流还是交流。越界的 ch 落到 CH1。 */
+    uint32_t getOscCoupleDraft(osc_trace_ch_t ch) const;
+
+    /** 草稿: 写。非 OSC_COUPLE_AC 的值一律按直流存 (和 CM4 那边的判法一致)。 */
+    void setOscCoupleDraft(osc_trace_ch_t ch, uint32_t coup);
+
+    /**
+     * 按下 Save: 草稿 → 已提交, 两路一起推给 CM4。
+     *
+     * 两路都写, 不管这一路改没改 —— CM4 那边是拿本地旧值比过才动引脚的
+     * (frontend_poll), 所以多写一次不会让耦合脚多抖一下。
+     */
+    void commitOscEdit();
+
     /* ---- 逻辑分析仪 ---- */
 
     /**
@@ -341,6 +377,13 @@ protected:
     uint32_t oscSelected;
     uint32_t oscMode[2];
     uint32_t oscGain[2];
+
+    /* ---- 交直流耦合: 已提交 / 草稿 ----
+     *
+     * 和上面协议配置那两份是一个道理: 已提交那份给"下次进设置屏把开关摆回去"和
+     * syncOscUi() 用, 草稿那份给设置屏编辑用。两者的说明见上面那一段。 */
+    uint32_t committedCouple[2];
+    uint32_t draftCouple[2];
 
     /* ---- 协议解码 ---- */
 

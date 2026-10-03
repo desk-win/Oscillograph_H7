@@ -134,8 +134,10 @@ int main(void)
   MX_SDMMC1_SD_Init();
   MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
-  OSC_Ch1_Multiple(1, 1);
-  OSC_Ch2_Multiple(1, 1);
+  /* 模拟前端的开机状态: X1 + 直流。这两个参数要和 osc_ctrl 的 ctrl_defaults()
+   * 里记的那份账对上 (那边有说明) —— 这里是真动手摆引脚的那一次。 */
+  OSC_Ch1_Multiple(1, OSC_COUPLE_DC);
+  OSC_Ch2_Multiple(1, OSC_COUPLE_DC);
   OSC_CH_Init();
   /* 逻辑分析仪的采集侧。放在 OSC_CH_Init() 之后: 它要用 DWT (那把计数器在
    * osc_scan_half 那边的 dwt_init 里才打开), 而且它一上来就把示波器的 ADC

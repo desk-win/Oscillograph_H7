@@ -31,11 +31,24 @@
  * 当前这一版在**末尾**添了放大倍数 (cfg_gain_ch1/2), 结构体从 96 B 长到
  * 128 B。旧的字段偏移一个都没动 —— 漏烧一个核的表现就只是"增益不生效",
  * 而不是"诊断数值乱跳"。
+ *
+ * 再往后一版又把交直流耦合 (cfg_dc_ch1/2) 摆在放大倍数旁边, 占的是原来
+ * _rsvd_gain 里的两格 —— 总长还是 128 B, 旧字段偏移依旧一个没动, 所以"只烧
+ * 一个核"的表现还是那一种: 耦合设置不生效, 而不是数值乱跳。
  * ========================================================================= */
 
-#define OSC_SHARED_MAGIC      0x4F534333u     /* 'OSC3': 末尾添了两个模拟前端字段 */
+#define OSC_SHARED_MAGIC      0x4F534334u     /* 'OSC4': 模拟前端多了交直流耦合 */
 
 #define OSC_LEVEL_AUTO        0xFFFFFFFFu     /* cfg_trig_level_* 填它 = CM4 自适应定电平 */
+
+/* 耦合方式 —— 就是 OSC_Chx_Multiple() 第二个参数的取值 (见 CM4/osc_operate.c):
+ * 1 = 直流, 0 = 交流。上电默认直流。
+ *
+ * 单独定义出来, 是因为这一个值要出现在四个地方: CM7 的 Model 默认值、CM4 的
+ * ctrl_defaults()、CM4 main.c 里那两句开机初始化、frontend_poll() 的摆引脚。
+ * 散着写 1/0 的话, 改一次默认值就得靠记性去找全。 */
+#define OSC_COUPLE_DC         1u
+#define OSC_COUPLE_AC         0u
 
 #define OSC_CH1_BUF_ADDR      0x30030000u
 #define OSC_CH2_BUF_ADDR      0x30034000u
@@ -96,7 +109,7 @@ typedef struct {
     uint32_t diag_max_ch2;
     uint32_t diag_level_ch2;
 
-    /* ---- CM7 写, CM4 读: 模拟前端 (放大倍数) ----
+    /* ---- CM7 写, CM4 读: 模拟前端 (放大倍数 + 交直流耦合) ----
      *
      * 加在**末尾**是刻意的: 偏移量是两核之间唯一的契约, 插在中间会把 diag_*
      * 那一整段往后推, 于是"漏烧一个核"的表现从"增益不生效"变成"诊断数值乱跳"——
@@ -104,13 +117,25 @@ typedef struct {
      *
      * 值就是 S_4051 的档位号: 0..7 → X1, X2, X4, ..., X128 (倍数 = 1 << n)。
      * CM4 那边在主循环里和本地旧值比, 变了才动 MUX 引脚 —— 见 CM4 的
-     * frontend_poll()。越界值会被 CM4 按 X1 处理。 */
+     * frontend_poll()。越界值会被 CM4 按 X1 处理; 耦合值只有正好等于
+     * OSC_COUPLE_AC 才当交流, 其余一律直流 (上电默认值)。 */
     uint32_t cfg_gain_ch1;
     uint32_t cfg_gain_ch2;
 
-    /* 补到 128 B。不是为了让结构体好看: 0x30036000 + 128 = 0x30036080 正好是
-     * LOG_CTRL_ADDR, 再长一个字节就压到逻辑分析仪的控制块上了。 */
-    uint32_t _rsvd_gain[6];
+    /* 交直流耦合, OSC_COUPLE_DC / OSC_COUPLE_AC。
+     *
+     * 和放大倍数是一对: 两者都在模拟前端那一级, 而且由 **同一个** OSC_Chx_Multiple
+     * (倍数, 耦合) 摆到引脚上 (每调一次都要把三根 MUX 地址线和耦合脚整个写一遍)。
+     * 所以放在它旁边, 改一个的时候另一个就在眼皮底下。
+     *
+     * 上电默认直流 —— 要和 CM4 的 ctrl_defaults() 和 main.c 里那两句对上。 */
+    uint32_t cfg_dc_ch1;
+    uint32_t cfg_dc_ch2;
+
+    /* 补到 128 B (原来 6 格, 交直流那两格挪出去用了)。不是为了让结构体好看:
+     * 0x30036000 + 128 = 0x30036080 正好是 LOG_CTRL_ADDR, 再长一个字节就压到
+     * 逻辑分析仪的控制块上了。 */
+    uint32_t _rsvd_gain[4];
 } osc_ctrl_t;                   /* 32 word = 128 B */
 
 #define OSC_CTRL ((volatile osc_ctrl_t *)OSC_CTRL_ADDR)

@@ -248,7 +248,8 @@ void M7_OSC_Poll(void)
 }
 
 /* ===========================================================================
- * 模拟前端 (放大倍数) —— 写共享控制块, CM4 那边的 frontend_poll 去摆引脚
+ * 模拟前端 (放大倍数 / 交直流耦合) —— 写共享控制块, CM4 那边的 frontend_poll
+ * 去摆引脚
  *
  * 为什么不能在这边直接写 GPIO: MUX 的地址线 A_S0/S1/S2、B_S0 只定义在 CM4 的
  * main.h 里, CM7 这份连宏都没有, 也没开那几个口的时钟。跨核走共享块是唯一
@@ -261,5 +262,12 @@ void M7_OSC_SetFrontend(uint32_t ch, uint32_t gain_code)
 {
     if (ch == 0u) { OSC_CTRL->cfg_gain_ch1 = gain_code; }
     else          { OSC_CTRL->cfg_gain_ch2 = gain_code; }
+    __DMB();
+}
+
+void M7_OSC_SetCoupling(uint32_t ch, uint32_t coup)
+{
+    if (ch == 0u) { OSC_CTRL->cfg_dc_ch1 = coup; }
+    else          { OSC_CTRL->cfg_dc_ch2 = coup; }
     __DMB();
 }
