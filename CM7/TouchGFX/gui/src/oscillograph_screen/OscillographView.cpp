@@ -2,6 +2,7 @@
 #include <touchgfx/Color.hpp>
 #include <touchgfx/hal/HAL.hpp>
 #include <platform/driver/lcd/LCD16bpp.hpp>
+#include <texts/TextKeysAndLanguages.hpp>   /* T_OSCTIMEMS / T_OSCTIMEUS / T_OSCSCOPEFMT */
 
 /* 下面按 uint16_t 一个像素直接往显存里写, 所以显存必须是 RGB565。改了
  * USE_BPP 这里得跟着改, 卡一道免得悄悄画花。 */
@@ -227,4 +228,107 @@ void OscillographView::updateTrace(const uint16_t* ch1, const uint16_t* ch2,
 {
     /* 通道 1 → 青色, 通道 2 → 黄色, 两条都画在同一个图区里叠着 (和以前一样) */
     traceWidget.setTrace(ch1, ch2, fresh1, fresh2);
+}
+
+/* ===========================================================================
+ * 右下角那两个模式文字区
+ *
+ * ── 为什么每次都得 resizeToCurrentText() ──
+ *
+ * 生成代码里这两个控件是这么来的 (OscillographViewBase.cpp):
+ *
+ *     ch1mode_valueBuffer[0] = 0;
+ *     ch1mode_value.setWildcard(ch1mode_valueBuffer);
+ *     ch1mode_value.resizeToCurrentText();      ← 这一句是空操作
+ *     ch1mode_value.setTypedText(TypedText(T___SINGLEUSE_X9ZI));
+ *
+ * 那个 resizeToCurrentText() 排在 setTypedText 之前, 而 TextArea::resizeToCurrentText
+ * 一进门就是 `if (typedText.hasValidId())` —— 这时还没有文本 id, 直接返回, 宽度
+ * 仍然是 0。后面 setTypedText 会补一次 resize, 但那时通配缓冲区是空的 (""),
+ * 量出来还是 0 宽。
+ *
+ * 而宽度 0 的控件**根本不会被画**: 父容器的 draw 逐个求交, Rect(0,0,0,h) 是空
+ * 矩形, 直接跳过。不报错、不警告, 屏幕右下角就是空的。
+ *
+ * 所以我们自己填完缓冲区再量一次。填之前量没用 (量的是上一次的字符串), 量完
+ * 必须自己标脏 —— TextArea::setColor / resizeToCurrentText / setTypedText 三个
+ * 都不调 invalidate()。
+ *
+ * ── 为什么标脏标的是 box3 而不是这两个控件 ──
+ *
+ * 文字变短的时候, 控件自己的矩形跟着缩, 只标新矩形的话右边会留下上次那一截
+ * 残字。box3 是那一整条白底 (见 OscillographViewBase.cpp: setPosition(0, 437,
+ * 792, 43)), 两个文字区都在它里面 —— 标它一次, 老宽度和新宽度都盖住了, 而且
+ * 它是这两个控件的**兄弟节点** (同挂在屏幕上), 所以它脏了之后框架会把这块区域
+ * 上的所有兄弟重画一遍, 包括背景白底和文字。比"先标旧矩形再标新矩形"干净。
+ * ========================================================================= */
+
+void OscillographView::updateModeText(const osc_ui_state_t& st)
+{
+    setModeText(ch1mode_value, ch1mode_valueBuffer, CH1MODE_VALUE_SIZE, st, 0u);
+    setModeText(ch2mode_value, ch2mode_valueBuffer, CH2MODE_VALUE_SIZE, st, 1u);
+
+    /* 两个都写完再标脏一次。字符串本来就在 box3 里面, 前后差几个像素, 一次就够。 */
+    box3.invalidate();
+}
+
+void OscillographView::setModeText(touchgfx::TextAreaWithOneWildcard& ta,
+                                   touchgfx::Unicode::UnicodeChar* buffer, uint16_t bufferSize,
+                                   const osc_ui_state_t& st, uint32_t ch)
+{
+    /* 选中那一路的文字变亮蓝 (24, 200, 219) = 0x18C8DB, 没选中的是黑的 (和生成
+     * 代码里的初值一致)。整条文字变色, 不只是数字 —— 一眼就能看出编码器现在
+     * 管的是哪一路。 */
+    ta.setColor((st.selected == ch)
+                    ? touchgfx::Color::getColorFromRGB(0x18, 0xC8, 0xDB)
+                    : touchgfx::Color::getColorFromRGB(0x00, 0x00, 0x00));
+
+    if (st.mode[ch] == OSC_MODE_SCOPE)
+    {
+        /* 放大倍数: 档位号 → 倍数 (1 << n), 所以显示 X1 / X2 / ... / X128。
+         * 格式串 "scope x<>" 里的 x 和空格来自 texts.xml —— 字体里有没有那些
+         * 字形全看那儿 (见 texts.xml 里那三条), 缓冲区里只放数字。 */
+        ta.setTypedText(touchgfx::TypedText(T_OSCSCOPEFMT));
+        touchgfx::Unicode::snprintf(buffer, bufferSize, "%d", 1 << st.gain[ch]);
+    }
+    else
+    {
+        /* 时基: 一屏的时长按大小换单位显示, 都是两位小数。
+         *
+         * 不显示成固定的 ms: 最快三档是 163.84 / 327.68 / 655.36 µs, 按 ms 写成
+         * "0.16 / 0.33 / 0.66" 精度掉得太厉害 (一眼看不出是 163 还是 164)。
+         * 反过来 > 1 ms 的档按 µs 写又是四位数字, 太长。
+         *
+         * 定点的做法: 先把纳秒换算成"单位 0.01 µs/ms 的整数", 再拆成整数部分和
+         * 小数部分分别交给 snprintf —— 完全不走浮点 (这条路上根本没有 FPU 开销
+         * 的位置, 而且 %f 那一套在这个 Unicode::snprintf 里也不支持)。
+         *
+         * 小数部分用 "%0*d" 加精度参数补零, 而不是 "%02d": 后者是"宽度"语义,
+         * 而这个实现里宽度和精度的分工和标准库一致与否没人验过 —— 框架自己也
+         * 是这么写的 (TextProgress.cpp:67 的 "%d.%0*d")。
+         *
+         * 值是截断不是四舍五入: 唯一的偏差是 10.48576 ms 显示成 10.48。无妨。 */
+        const uint32_t ns = OSC_Trace_SpanNs(st.tb[ch]);
+
+        if (ns < 1000000u)
+        {
+            /* µs。1 µs = 1000 ns, 一位小数 = 100 ns, 所以整体除以 10 得到
+             * "百分之几微秒"的整数。 */
+            const uint32_t v = ns / 10u;
+            ta.setTypedText(touchgfx::TypedText(T_OSCTIMEUS));
+            touchgfx::Unicode::snprintf(buffer, bufferSize, "%d.%0*d",
+                                        (int)(v / 100u), 2, (int)(v % 100u));
+        }
+        else
+        {
+            /* ms。同上, 整体除以 10000, 得到"百分之几毫秒"。 */
+            const uint32_t v = ns / 10000u;
+            ta.setTypedText(touchgfx::TypedText(T_OSCTIMEMS));
+            touchgfx::Unicode::snprintf(buffer, bufferSize, "%d.%0*d",
+                                        (int)(v / 100u), 2, (int)(v % 100u));
+        }
+    }
+
+    /* 缓冲区填完了才量宽度, 见上面那一段。 */
+    ta.resizeToCurrentText();
 }

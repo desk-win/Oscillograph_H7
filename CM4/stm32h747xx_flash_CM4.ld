@@ -218,7 +218,8 @@ SECTIONS
    * 绝对地址之后, 优化级别再变也影响不到这里。
    *
    * 尺寸对不上会在链接期报错 (osc_ch1_buf 必须是 16 KB、osc_ch2_buf 8 KB、
-   * osc_ctrl 96 B, 首尾正好接上), 不会悄悄错位。 */
+   * osc_ctrl 128 B —— 0x30036000..0x30036080 正好顶到 CM7 那边的
+   * LOG_CTRL_ADDR, 首尾正好接上), 不会悄悄错位。 */
   .osc_ch1_buf 0x30030000 (NOLOAD) : { KEEP(*(.osc_ch1_buf)) } >RAM_D2
   .osc_ch2_buf 0x30034000 (NOLOAD) : { KEEP(*(.osc_ch2_buf)) } >RAM_D2
   .osc_ctrl    0x30036000 (NOLOAD) : { KEEP(*(.osc_ctrl))    } >RAM_D2

@@ -1,4 +1,5 @@
 #include "oscillograph.h"
+#include "osc_operate.h"        /* OSC_Chx_Multiple —— 模拟前端的档位 */
 #include "stm32h7xx_hal_adc_ex.h"
 #include "stm32h7xx_hal_adc.h"
 #include "usb_printf.h"
@@ -7,7 +8,7 @@
 /* 三个对象各占一个具名段, 由链接脚本按绝对地址钉死在 RAM_D2 里:
  *     0x30030000  osc_ch1_buf   (16 KB)
  *     0x30034000  osc_ch2_buf   ( 8 KB)
- *     0x30036000  osc_ctrl      (96 B)
+ *     0x30036000  osc_ctrl      (128 B)
  * 地址契约见 sharedconfig.h, OSC_CH_Init 里还会自检一道。
  *
  * 不靠"谁先声明谁在前": 那个顺序是编译器定的, 换个优化级别就可能变。以前三个
@@ -79,6 +80,13 @@ static void ctrl_defaults(void)
     osc_ctrl.diag_min_ch2    = 0u;
     osc_ctrl.diag_max_ch2    = 0u;
     osc_ctrl.diag_level_ch2  = 0u;
+
+    /* 模拟前端上电状态: 两路都是 X1。要和 CM4/Core/Src/main.c 里那两句
+     * OSC_Chx_Multiple(1, 1) 对上 —— 那两句是真正动手摆引脚的, 这里只是把
+     * 记账的那一份摆成同一个值, 免得 frontend_poll() 第一轮以为"要改成 X1"
+     * 而多动一次 MUX (无害, 但会让开机的继电器/模拟开关多抖一下)。 */
+    osc_ctrl.cfg_gain_ch1    = 0u;
+    osc_ctrl.cfg_gain_ch2    = 0u;
 }
 
 /**
@@ -489,6 +497,34 @@ static void osc_scan_half(uint32_t ch, uint32_t done, uint32_t lag)
 }
 
 /**
+*   @brief 把 CM7 写的那两个放大倍数档位摆到 MUX 引脚上
+*   @note  由 OSC_CH_Poll() 每轮调一次, 见那边的说明。
+*/
+static void frontend_poll(void)
+{
+    /* 初值给一个不可能是合法档位的数 —— 保证第一轮必定应用一次, 不依赖
+     * "别处已经把它摆对了"。 */
+    static uint32_t last_ch1 = 0xFFFFFFFFu;
+    static uint32_t last_ch2 = 0xFFFFFFFFu;
+
+    const uint32_t g1 = osc_ctrl.cfg_gain_ch1;
+    const uint32_t g2 = osc_ctrl.cfg_gain_ch2;
+
+    /* 档位号 → 倍数: 1 << n (0→X1, 1→X2, ... 7→X128)。越界的当 X1 ——
+     * OSC_Chx_Multiple 的 default 分支也是 X1, 两边一致。
+     * 先判上界再移位: 直接 1u << g1 的话, g1 = 32 是未定义行为。 */
+    if (g1 != last_ch1) {
+        last_ch1 = g1;
+        OSC_Ch1_Multiple((uint8_t)((g1 <= 7u) ? (1u << g1) : 1u), 1u);
+    }
+
+    if (g2 != last_ch2) {
+        last_ch2 = g2;
+        OSC_Ch2_Multiple((uint8_t)((g2 <= 7u) ? (1u << g2) : 1u), 1u);
+    }
+}
+
+/**
 *   @brief 主循环里反复调用: 把中断记下的"刚完成的半帧"扫掉
 *   @note  必须在半个帧周期 (2048 word × 320 ns = 655 µs) 内被调到。
 *          主循环里不要放阻塞调用 —— USB 打印、HAL_Delay 都会让它跟不上,
@@ -496,6 +532,20 @@ static void osc_scan_half(uint32_t ch, uint32_t done, uint32_t lag)
 */
 void OSC_CH_Poll(void)
 {
+    /* ---- 模拟前端 (放大倍数) ----
+     *
+     * MUX 的三根地址线 (A_S0/S1/S2, B_S0) 和耦合脚只在 CM4 的 main.h 里, CM7
+     * 那份连宏都没有 —— 所以"调增益"必须跨核传, 不能各写各的。
+     *
+     * 机制故意做得最笨: 每轮把两个档位读出来和本地旧的比, 变了才动引脚。不加
+     * cmd_seq 那套"序号变了才整体重读" —— osc_ctrl_t 里现有的 cfg_trig_* /
+     * cfg_run_* 也没有, 全都是"单写者写、单读者轮询 + 本地存旧值"。多一层序号
+     * 只会多一个能和实际状态跑偏的地方。
+     *
+     * 放在最前面、三个 if 之外 —— 两个通道都停着的时候也要能改增益, 用户完全
+     * 可能是先把档位调好再看波形。开销是 2 次 volatile 读 + 2 次比较。 */
+    frontend_poll();
+
     /* ---- 逻辑分析仪把 ADC 抢走之后, 示波器要重新开始时在这里补启 ----
      *
      * 两个屏幕各自有个开关, 切屏不改变对方的状态, 所以 CM4 这边强制互斥

@@ -4,9 +4,9 @@
  * 环是 CM4 一直写、CM7 一直搬的, 没有"存满了"这个状态, 所以读的时候必须
  * 保证读到的每一个 word 都已经落定。做法不是加锁, 而是"读旧的":
  *
- *   1) 一屏只有 OSC_TRACE_WORDS (8192) 个 word, 而环有 4194304 个 word,
- *      相差 512 倍。只要一屏的尾巴离写指针还有足够距离, 读的整个过程里写
- *      指针都不可能追上它。
+ *   1) 一屏最多 OSC_TRACE_COLUMNS × 256 = 131072 个 word, 而环有 4194304 个
+ *      word, 相差 32 倍。只要一屏的尾巴离写指针还有足够距离, 读的整个过程
+ *      里写指针都不可能追上它。 (最慢档之外差得更多, 最快的档差 4096 倍。)
  *   2) 下面所有窗口的取法都保证了 窗口尾巴 <= 写指针, 而且写入是按半帧
  *      为单位完成的, 所以读到的都在已经搬完的半帧里 —— 不会读到搬了一半的
  *      半帧。
@@ -24,14 +24,20 @@
 #define OSC_RING_WORDS  (OSC_SDRAM_HALVES * OSC_HALF_WORDS)
 #define OSC_RING_MASK   (OSC_RING_WORDS - 1u)
 
-/* 这两条要是破了, 后果是"波形莫名其妙拼错一格", 而且只在环绕回的那一刻出现
- * 一次, 极难查 —— 宁可编译不过。 */
+/* 这几条要是破了, 后果是"波形莫名其妙拼错一格", 而且只在环绕回的那一刻出现
+ * 一次, 极难查 —— 宁可编译不过。
+ *
+ * 后三条只按**最大档位** (W = OSC_TB_MAX_WPC) 判就够了: 档位表里 W = 1<<i,
+ * i ≤ 7, 而 2048 = 2^11 —— 所有档位的 W 都是最大档的约数, 也都是 2048 的
+ * 约数。最大的那个合上了, 小的自动合上。 */
 OSC_STATIC_ASSERT((OSC_RING_WORDS & OSC_RING_MASK) == 0u,
                   "环的 word 数必须是 2 的幂, 否则 & 掩码取模不成立");
-OSC_STATIC_ASSERT(OSC_TRACE_WORDS <= OSC_RING_WORDS,
-                  "一屏比环还长");
-OSC_STATIC_ASSERT(OSC_TRACE_WORDS_PER_COL <= OSC_HALF_WORDS,
-                  "一列跨过了半帧边界");
+OSC_STATIC_ASSERT(OSC_TRACE_COLUMNS * OSC_TB_MAX_WPC <= OSC_RING_WORDS,
+                  "最慢那一档的一屏比环还长");
+OSC_STATIC_ASSERT(OSC_TB_MAX_WPC <= OSC_HALF_WORDS,
+                  "最慢那一档的一列跨过了半帧边界");
+OSC_STATIC_ASSERT((OSC_HALF_WORDS % OSC_TB_MAX_WPC) == 0u,
+                  "半帧的 word 数除不下最大列宽 —— 一列会跨半帧边界");
 
 /* ---- 绝对 word 号 → SDRAM 里的值 (自动绕回) ----
  * 绝对 word 号是"从采集开始算起的第几个 word", 单调递增, 不绕回; 绕回只发生
@@ -39,12 +45,57 @@ OSC_STATIC_ASSERT(OSC_TRACE_WORDS_PER_COL <= OSC_HALF_WORDS,
 #define CH1_WORD(w) (*(const volatile uint32_t *)(OSC_SDRAM_CH1_BASE + (((w) & OSC_RING_MASK) * 4u)))
 #define CH2_WORD(w) (*(const volatile uint16_t *)(OSC_SDRAM_CH2_BASE + (((w) & OSC_RING_MASK) * 2u)))
 
+/* ===========================================================================
+ * 时基档位表
+ *
+ * 一屏 = OSC_TRACE_COLUMNS × wpc 个 word, 时间 = 那个数 × OSC_WORD_PERIOD_NS。
+ * 档位号就是 1<<i, 所以 wpc 全部是 2 的幂, 也就全部整除半帧 (2048) —— 一列
+ * 因此永远不跨半帧边界, "读的每一段都落在已经搬完的半帧里"这条保证不用重证。
+ *
+ * refresh_div 是重画节流。抽一屏要读 1024×wpc 个 word, 非 cache 的 SDRAM 标量
+ * 读约 19 周期/word @480 MHz —— wpc=16 是 650 µs (现状), wpc=256 是 10.4 ms。
+ * 后者要是还按 50 ms 重画, 平均就吃掉 21% 的帧时间, 而且那一帧本身会超掉
+ * 16.7 ms 的节拍, 画面肉眼可见地顿。所以档位越大节流越狠, 代价是刷新变慢
+ * (134 ms 一次) —— 看 42 ms 的波形时这个刷新率够用。
+ *
+ * span_ns 给界面显示用, 在这儿算好省得界面那边做乘法再拼单位。
+ * ========================================================================= */
+#define OSC_TB_SPAN_NS(w)   (OSC_TRACE_COLUMNS * (uint32_t)(w) * OSC_WORD_PERIOD_NS)
+
+typedef struct {
+    uint16_t wpc;           /* 每列吃几个 word */
+    uint16_t refresh_div;   /* 隔几个 tick 重画一次 */
+    uint32_t span_ns;       /* 一屏的时长 */
+} osc_tb_t;
+
+static const osc_tb_t s_tb[OSC_TB_STEPS] = {
+    {   1u, OSC_TRACE_REFRESH_TICKS, OSC_TB_SPAN_NS(  1u) },  /* 163.84 µs */
+    {   2u, OSC_TRACE_REFRESH_TICKS, OSC_TB_SPAN_NS(  2u) },  /* 327.68 µs */
+    {   4u, OSC_TRACE_REFRESH_TICKS, OSC_TB_SPAN_NS(  4u) },  /* 655.36 µs */
+    {   8u, OSC_TRACE_REFRESH_TICKS, OSC_TB_SPAN_NS(  8u) },  /*   1.31 ms */
+    {  16u, OSC_TRACE_REFRESH_TICKS, OSC_TB_SPAN_NS( 16u) },  /*   2.62 ms ← 默认 */
+    {  32u, OSC_TRACE_REFRESH_TICKS, OSC_TB_SPAN_NS( 32u) },  /*   5.24 ms */
+    {  64u, 4u,                      OSC_TB_SPAN_NS( 64u) },  /*  10.49 ms */
+    { 128u, 6u,                      OSC_TB_SPAN_NS(128u) },  /*  20.97 ms */
+    { 256u, 8u,                      OSC_TB_SPAN_NS(256u) },  /*  41.94 ms */
+};
+
+/* 每通道一份档位。默认 OSC_TB_DEFAULT —— 和加这个功能之前的行为完全一致。
+ * 只被 TouchGFX 任务碰 (界面里转编码器), 不用加锁。 */
+static uint8_t s_tb_idx[2] = { OSC_TB_DEFAULT, OSC_TB_DEFAULT };
+
+/* 当前档位导出的三个量。ch 是 0/1 (OSC_TRACE_CH1/CH2), 调用方保证不越界。 */
+static uint32_t wpc_of(uint32_t ch)    { return s_tb[s_tb_idx[ch]].wpc; }
+static uint32_t span_words(uint32_t ch){ return OSC_TRACE_COLUMNS * wpc_of(ch); }
+static uint32_t pre_words(uint32_t ch) { return OSC_TRACE_TRIG_COL * wpc_of(ch); }
+static uint32_t post_words(uint32_t ch){ return span_words(ch) - pre_words(ch); }
+
 /* ---------------------------------------------------------------------------
  * 触发锁存, 每个通道一份
  *
- * 要解决的问题: 一屏 8192 个 word, 触发点在第 128 列, 也就是触发点右边还要
- * 6144 个 word 的"触发后"数据。触发刚发生的那一刻, 那些数据根本还没采出来,
- * 所以不能一看到触发就用它 —— 那样画出来的窗口有一大半落在未来。
+ * 要解决的问题: 一屏 512 列, 触发点在第 128 列, 也就是触发点右边还要 384 列
+ * 的"触发后"数据 (默认档 6144 个 word)。触发刚发生的那一刻, 那些数据根本还没
+ * 采出来, 所以不能一看到触发就用它 —— 那样画出来的窗口有一大半落在未来。
  *
  * 但也不能"每次都重新看最新的触发": 每次看到的都是最新的那一帧, 它的右边
  * 永远差 3 个半帧, 于是永远不满足条件 —— 死锁, 屏幕上永远是自由运行的波形。
@@ -223,22 +274,25 @@ static void trig_poll(uint32_t ch)
 
         /* 上界 OSC_RING_WORDS 不能少: latest 是"安全水位", 可能比刚发布的
          * 那个触发点还靠前, 这时 age 会借位成一个巨大的数, 光看
-         * >= POST_WORDS 会误判成"够老了"。 */
-        if (t->cand >= OSC_TRACE_PRE_WORDS &&
-            age >= OSC_TRACE_POST_WORDS &&
+         * >= post_words 会误判成"够老了"。
+         *
+         * pre/post 现在是按这一路自己的档位算的 (见 s_tb): 档位越大, 触发点
+         * 右边的数据要等越久才采得出来 (最慢档 98304 word = 31.5 ms)。 */
+        if (t->cand >= pre_words(ch) &&
+            age >= post_words(ch) &&
             age < OSC_RING_WORDS) {
             t->trig      = t->cand;
             t->locked    = 1u;
             t->cand_held = 0u;
-        } else if (t->cand < OSC_TRACE_PRE_WORDS ||
+        } else if (t->cand < pre_words(ch) ||
                    (t->cand < latest && age >= OSC_RING_WORDS)) {
             /* 这个候选永远等不到能用的那一天了, 必须把位置让出来 —— 一直
              * 占着的话 cand_held 永不落, 后面来的触发一个都进不来, 屏幕从
              * 此只能自由运行, 而且再也不会自己恢复。两种情形:
              *
-             *   cand < PRE_WORDS    环里它左边根本没有 2048 个 word 可显示
-             *                       (只可能出现在开机后头一个半帧上), 再等
-             *                       也一样;
+             *   cand < pre_words    环里它左边根本没有一屏的 1/4 那么多 word
+             *                       可显示 (只可能出现在开机后头一个半帧上),
+             *                       再等也一样;
              *   cand < latest 且已老过一整圈
              *                       两次 trig_poll 之间隔了超过 1.34 s, 它
              *                       左边那段已经被写指针绕回去盖掉了。
@@ -262,17 +316,34 @@ void OSC_Trace_Poll(void)
  * 定窗口
  * ========================================================================= */
 
-/* 算出这一屏的第一个 word 的绝对下标。返回 0 = 没有可显示的数据。 */
-static int window_start(uint32_t ch, uint32_t *out)
+/* 算出这一屏的第一个 word 的绝对下标, 顺便把这一路当前的列宽交出去
+ * (*out_wpc)。返回 0 = 没有可显示的数据。
+ *
+ * 列宽从这儿出去而不是让 Build 自己再取一次, 是为了让"窗口多长"和"一列多宽"
+ * 一定是同一份快照算出来的 —— 分成两次取的话, 正好夹在中间转了编码器就会
+ * 拿新档位的列宽去画旧档位的窗口, 屏幕上表现为整屏的时间量纲对不上真实窗口
+ * (画得出来, 只是每列代表的时长和窗口总长自相矛盾), 而且下一次重画就自愈,
+ * 极难复现。 */
+static int window_start(uint32_t ch, uint32_t *out, uint32_t *out_wpc)
 {
     osc_trig_t *t = &s_trig[ch];
     uint32_t latest = safe_words(seq_of(ch));   /* 已经确定落定的 word 数 */
     uint32_t valid  = s_valid_from[ch];         /* 本次启动之前的一律不算 */
 
+    /* 这一路的档位导出的三个量, 整个函数用同一份快照算 —— 中途有人转编码器
+     * 换了档位的话, 拿到的是"换之前"那一套, 自洽; 下一次 Build 再用新的。
+     * 换档本身会把 locked 清掉 (见 OSC_Trace_SetTimebase), 所以不会出现
+     * "用新档位的 pre 配旧档位的 trig"。 */
+    const uint32_t wpc  = wpc_of(ch);
+    const uint32_t span = span_words(ch);
+    const uint32_t pre  = pre_words(ch);
+
+    *out_wpc = wpc;
+
     if (t->locked) {
-        uint32_t start = t->trig - OSC_TRACE_PRE_WORDS;
+        uint32_t start = t->trig - pre;
         /* 触发点太老的话, 它左边那一段已经被写指针绕回去盖掉了。
-         * 用减法比较, 跨回绕也对; 下界 OSC_TRACE_WORDS 顺手保证读的都在
+         * 用减法比较, 跨回绕也对; 下界 span 顺手保证读的都在
          * 安全水位之内。
          *
          * start >= valid 这一条是重新打开时用的: 触发点本身可能是停之前
@@ -288,9 +359,9 @@ static int window_start(uint32_t ch, uint32_t *out)
 
     /* 自由运行: 没有触发 (直流输入下 CM4 的 trig_flags 恒为 0), 或者触发
      * 太久没来。窗口贴着写指针走, 波形从右往左滚。 */
-    if (latest < OSC_TRACE_WORDS) return 0;          /* 环里还没凑够一屏 */
-    if (latest - valid < OSC_TRACE_WORDS) return 0;  /* 攒的全是上次留下的 */
-    *out = latest - OSC_TRACE_WORDS;
+    if (latest < span) return 0;          /* 环里还没凑够一屏 */
+    if (latest - valid < span) return 0;  /* 攒的全是上次留下的 */
+    *out = latest - span;
     return 1;
 }
 
@@ -300,15 +371,15 @@ static int window_start(uint32_t ch, uint32_t *out)
 
 /* CH1: 一个 word 装两个样本 —— 低 16 位是 ADC1 的, 时间在前; 高 16 位是 ADC2
  * 的, 时间在后 (CM4 那边 ADC1/ADC2 多重模式交替采同一个输入)。
- * 所以 16 个 word = 32 个样本, 只留下 min 和 max。 */
-static void build_ch1(uint32_t start, uint16_t *y)
+ * 所以 W 个 word = 2W 个样本, 只留下 min 和 max。 */
+static void build_ch1(uint32_t start, uint32_t wpc, uint16_t *y)
 {
     for (uint32_t c = 0u; c < OSC_TRACE_COLUMNS; c++) {
-        uint32_t w = start + c * OSC_TRACE_WORDS_PER_COL;
+        uint32_t w = start + c * wpc;
         uint16_t lo = 0xFFFFu;
         uint16_t hi = 0u;
 
-        for (uint32_t k = 0u; k < OSC_TRACE_WORDS_PER_COL; k++) {
+        for (uint32_t k = 0u; k < wpc; k++) {
             uint32_t word = CH1_WORD(w + k);
             uint16_t a = (uint16_t)(word & 0xFFFFu);
             uint16_t b = (uint16_t)(word >> 16);
@@ -323,15 +394,15 @@ static void build_ch1(uint32_t start, uint16_t *y)
     }
 }
 
-/* CH2: 一个 word 就是一个样本 (uint16), 16 个 word = 16 个样本。 */
-static void build_ch2(uint32_t start, uint16_t *y)
+/* CH2: 一个 word 就是一个样本 (uint16), W 个 word = W 个样本。 */
+static void build_ch2(uint32_t start, uint32_t wpc, uint16_t *y)
 {
     for (uint32_t c = 0u; c < OSC_TRACE_COLUMNS; c++) {
-        uint32_t w = start + c * OSC_TRACE_WORDS_PER_COL;
+        uint32_t w = start + c * wpc;
         uint16_t lo = 0xFFFFu;
         uint16_t hi = 0u;
 
-        for (uint32_t k = 0u; k < OSC_TRACE_WORDS_PER_COL; k++) {
+        for (uint32_t k = 0u; k < wpc; k++) {
             uint16_t v = CH2_WORD(w + k);
             if (v < lo) lo = v;
             if (v > hi) hi = v;
@@ -346,10 +417,78 @@ int OSC_Trace_Build(osc_trace_ch_t ch, uint16_t *y_out)
 {
     if (!OSC_Trace_IsRunning(ch)) return 0;    /* 停掉的那一路不再重新抠数 */
 
-    uint32_t start;
-    if (!window_start((uint32_t)ch, &start)) return 0;
+    uint32_t start, wpc;
+    if (!window_start((uint32_t)ch, &start, &wpc)) return 0;
 
-    if (ch == OSC_TRACE_CH1) build_ch1(start, y_out);
-    else                     build_ch2(start, y_out);
+    if (ch == OSC_TRACE_CH1) build_ch1(start, wpc, y_out);
+    else                     build_ch2(start, wpc, y_out);
     return 1;
+}
+
+/* ===========================================================================
+ * 时基档位 —— 界面在转编码器时碰的那几个
+ *
+ * 整个模块的状态只被 TouchGFX 任务碰 (Model::tick / 编码器回调都在那个任务
+ * 里), 所以这里不加锁。CM4 完全不关心档位 —— 它只管按固定节奏采, 抽点是
+ * 这边的事。
+ * ========================================================================= */
+
+void OSC_Trace_SetTimebase(osc_trace_ch_t ch, int idx)
+{
+    const uint32_t c = (uint32_t)ch;
+
+    /* 夹到边界而不是回绕: 转到 42 ms 就该停住。回绕的话从最慢档再往右一格
+     * 会一把跳回 164 µs, 用户看到的是"转过了头, 量程突然没了"。 */
+    if (idx < 0) idx = 0;
+    if (idx > (int)OSC_TB_STEPS - 1) idx = (int)OSC_TB_STEPS - 1;
+
+    if (s_tb_idx[c] == (uint8_t)idx) return;   /* 没变: 尤其别去动触发锁存 */
+
+    s_tb_idx[c] = (uint8_t)idx;
+
+    /* 必须丢掉这一路的触发锁存。锁存里的 trig 是绝对 word 号, 而"触发点落在
+     * 第几列" = pre_words(), 是跟着档位走的 —— 留着的话新档位下的 pre 和旧
+     * 锁存的 trig 配起来, 触发点会停在错误的列上, 而且看起来"有触发" (屏幕
+     * 不抖), 于是不会有人想到是档位的问题。
+     *
+     * cand_held 一起清: 候选也是按旧档位的 pre/post 判老嫩的, 留着它可能
+     * 立刻被按新档位判成"够老了"而采用 —— 同样是错的列。
+     *
+     * 清了之后 window_start 退回自由运行, 等下一个触发重新锁上 (几毫秒)。
+     * 这是换档必然要付的代价, 不是 bug。 */
+    s_trig[c].locked    = 0u;
+    s_trig[c].cand_held = 0u;
+
+    /* s_valid_from / s_running 不动: 环里有 1.34 s 的历史, 换档不需要重新
+     * 采集, 也不会空屏 —— 只是相位那一下子会重来。 */
+}
+
+int OSC_Trace_GetTimebase(osc_trace_ch_t ch)
+{
+    return (int)s_tb_idx[(uint32_t)ch];
+}
+
+uint32_t OSC_Trace_SpanNs(uint32_t idx)
+{
+    if (idx > OSC_TB_STEPS - 1u) idx = OSC_TB_STEPS - 1u;
+    return s_tb[idx].span_ns;
+}
+
+uint8_t OSC_Trace_RefreshTicks(void)
+{
+    uint32_t div = OSC_TRACE_REFRESH_TICKS;    /* 基准档的值, 也是下限 */
+
+    /* 两路各跑各的档位, 但共用同一个 tick 回调 —— 只能取大的那个: 取小的
+     * 会让慢档那一路按快档的节奏抽点, 每次重画都掉帧。都不在跑就返回基准值,
+     * 反正也没人看。 */
+    for (uint32_t c = 0u; c < 2u; c++) {
+        if (s_running[c]) {
+            const uint32_t d = s_tb[s_tb_idx[c]].refresh_div;
+            if (d > div) div = d;
+        }
+    }
+
+    /* 表里不会有 0, 但 0 会让调用方那边 (tickDiv - 1) 下溢成 0xFFFFFFFF,
+     * 表现是完全不刷新 —— 便宜的一行, 挡住这一类事故。 */
+    return (uint8_t)((div == 0u) ? 1u : div);
 }

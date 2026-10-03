@@ -9,7 +9,7 @@
  * 地址契约靠 CM4 的链接脚本保证: 三个符号依次落在
  *     osc_ch1_buf @ 0x30030000   (uint32, 16 KB)
  *     osc_ch2_buf @ 0x30034000   (uint16,  8 KB)
- *     osc_ctrl    @ 0x30036000   (96 B)
+ *     osc_ctrl    @ 0x30036000   (128 B)
  * CM4 在 OSC_CH_Init() 里自检, 对不上就 Error_Handler。
  *
  * 链接脚本里 RAM_D2 = 0x30030000 + 96 KB, 现在只用掉 24 KB,
@@ -28,12 +28,12 @@
  * 所以改了字段就得两个核一起重新烧 —— 只烧一个不会报任何错, 表现是各种数值
  * 莫名其妙地乱跳, 很难往"ABI 对不上"上想。
  *
- * 当前这一版把原来的 cfg_run 拆成了 cfg_run_ch1 / cfg_run_ch2 (两个通道分别
- * 启停), 用的是末尾那格 reserved —— 总大小还是 96 字节, 但 diag_* 的偏移
- * 全都前移了一个字。
+ * 当前这一版在**末尾**添了放大倍数 (cfg_gain_ch1/2), 结构体从 96 B 长到
+ * 128 B。旧的字段偏移一个都没动 —— 漏烧一个核的表现就只是"增益不生效",
+ * 而不是"诊断数值乱跳"。
  * ========================================================================= */
 
-#define OSC_SHARED_MAGIC      0x4F534332u     /* 'OSC2': 拆出每通道电平 + 自适应电平诊断 */
+#define OSC_SHARED_MAGIC      0x4F534333u     /* 'OSC3': 末尾添了两个模拟前端字段 */
 
 #define OSC_LEVEL_AUTO        0xFFFFFFFFu     /* cfg_trig_level_* 填它 = CM4 自适应定电平 */
 
@@ -95,7 +95,23 @@ typedef struct {
     uint32_t diag_min_ch2;
     uint32_t diag_max_ch2;
     uint32_t diag_level_ch2;
-} osc_ctrl_t;                   /* 24 word = 96 B */
+
+    /* ---- CM7 写, CM4 读: 模拟前端 (放大倍数) ----
+     *
+     * 加在**末尾**是刻意的: 偏移量是两核之间唯一的契约, 插在中间会把 diag_*
+     * 那一整段往后推, 于是"漏烧一个核"的表现从"增益不生效"变成"诊断数值乱跳"——
+     * 后者极难往 ABI 上想。加在末尾则旧字段偏移一个都不动。
+     *
+     * 值就是 S_4051 的档位号: 0..7 → X1, X2, X4, ..., X128 (倍数 = 1 << n)。
+     * CM4 那边在主循环里和本地旧值比, 变了才动 MUX 引脚 —— 见 CM4 的
+     * frontend_poll()。越界值会被 CM4 按 X1 处理。 */
+    uint32_t cfg_gain_ch1;
+    uint32_t cfg_gain_ch2;
+
+    /* 补到 128 B。不是为了让结构体好看: 0x30036000 + 128 = 0x30036080 正好是
+     * LOG_CTRL_ADDR, 再长一个字节就压到逻辑分析仪的控制块上了。 */
+    uint32_t _rsvd_gain[6];
+} osc_ctrl_t;                   /* 32 word = 128 B */
 
 #define OSC_CTRL ((volatile osc_ctrl_t *)OSC_CTRL_ADDR)
 
@@ -106,7 +122,7 @@ typedef struct {
 #define OSC_STATIC_ASSERT(c, m) _Static_assert(c, m)
 #endif
 
-OSC_STATIC_ASSERT(sizeof(osc_ctrl_t) == 96, "osc_ctrl_t 必须正好 96 字节");
+OSC_STATIC_ASSERT(sizeof(osc_ctrl_t) == 128, "osc_ctrl_t 必须正好 128 字节");
 
 
 /* ===========================================================================
@@ -222,6 +238,8 @@ OSC_STATIC_ASSERT(sizeof(log_ctrl_t) == 128, "log_ctrl_t 必须正好 128 字节
  * 采样缓冲还要 32 KB 对齐, 目的是不让它跨 MPU 子区域边界。
  *
  * 这三条在 CM4 的 LOG_Init 里还会再跑一遍运行时版本 (见 logic.c)。 */
+OSC_STATIC_ASSERT(OSC_CTRL_ADDR + sizeof(osc_ctrl_t) <= LOG_CTRL_ADDR,
+                  "osc_ctrl 长过头, 压到 log_ctrl 上了");
 OSC_STATIC_ASSERT(LOG_CTRL_ADDR + sizeof(log_ctrl_t) <= LOG_SAMPLE_BUF_ADDR,
                   "log_ctrl 压到采样缓冲头上了");
 OSC_STATIC_ASSERT((LOG_SAMPLE_BUF_ADDR & 0x7FFFu) == 0u,

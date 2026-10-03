@@ -137,6 +137,16 @@ void M7_OSC_CH2Start(void);
 /* 便利入口: 把两个通道各推一遍 */
 void M7_OSC_Poll(void);
 
+/* 换某一路的模拟前端放大倍数。gain_code: 0..7 → X1, X2, ..., X128。
+ *
+ * 只是往共享控制块里写一个字, 引脚是 CM4 动的 (那边的 MUX 地址线 CM7 根本
+ * 没配)。CM4 在下一次主循环迭代 (≤655 µs) 里看到它并摆引脚。
+ * ch: 0 = CH1, 1 = CH2 (和 OSC_TRACE_CH1/CH2 同值)。
+ *
+ * 越界值会被 CM4 按 X1 处理, 这里不再夹一次 —— 夹两道的话, 出现"夹的规则不
+ * 一致"时反而更难查。调用方保证 0..7。 */
+void M7_OSC_SetFrontend(uint32_t ch, uint32_t gain_code);
+
 #ifdef __cplusplus
 }
 #endif

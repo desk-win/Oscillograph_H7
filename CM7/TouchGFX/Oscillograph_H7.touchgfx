@@ -467,6 +467,68 @@
               "UseBuffer": true,
               "BufferSize": 20
             }
+          },
+          {
+            "Type": "TextArea",
+            "Name": "ch1mode_value",
+            "X": 588,
+            "Y": 446,
+            "Width": 86,
+            "Height": 24,
+            "TextId": "__SingleUse_X9ZI",
+            "TextRotation": "0",
+            "AutoSize": true,
+            "Wildcard1": {
+              "UseBuffer": true,
+              "BufferSize": 20
+            }
+          },
+          {
+            "Type": "TextArea",
+            "Name": "ch2mode_value",
+            "X": 353,
+            "Y": 446,
+            "Width": 86,
+            "Height": 24,
+            "TextId": "__SingleUse_UD7V",
+            "TextRotation": "0",
+            "AutoSize": true,
+            "Wildcard1": {
+              "UseBuffer": true,
+              "BufferSize": 20
+            }
+          },
+          {
+            "Type": "TextArea",
+            "Name": "ch1mode",
+            "X": 530,
+            "Y": 446,
+            "Width": 51,
+            "Height": 24,
+            "TextId": "__SingleUse_J105",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 24,
+              "Green": 200,
+              "Blue": 219
+            },
+            "AutoSize": true
+          },
+          {
+            "Type": "TextArea",
+            "Name": "ch2mode",
+            "X": 294,
+            "Y": 446,
+            "Width": 51,
+            "Height": 24,
+            "TextId": "__SingleUse_RPMB",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 212,
+              "Green": 180,
+              "Blue": 19
+            },
+            "AutoSize": true
           }
         ],
         "Interactions": [

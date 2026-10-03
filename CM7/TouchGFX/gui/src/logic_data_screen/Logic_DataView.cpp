@@ -8,7 +8,16 @@ namespace
  * generated/fonts/src/Table_verdana_20_4bpp.cpp): 20 号字里一共就 54 个字符,
  * 大写只到 A B C D H I K L M N O P R S T U X。写个大写 F 出来在屏上就是一片
  * 空白 —— 不报错、不告警。小写 a..e 本来就有, f 和 I2C 用的 [] 靠 texts.xml
- * 里那条 hexDigits 撑着 (那条实文本唯一的作用就是喂字模)。 */
+ * 里那条 hexDigits 撑着 (那条实文本唯一的作用就是喂字模)。
+ *
+ * ⚠ 别把这段说明写在 texts.xml 里: 那个文件会被 **Designer 图形界面**按它
+ * 内存里那份工程整个写回去, 手写的 XML 注释在那一下会消失 (已经发生过一次 ——
+ * 这段说明原先就写在 hexDigits 旁边, 现在就剩这儿了)。命令行
+ * `tgfx.exe generate` 不动 texts.xml, 所以用它生成是安全的。
+ * 要留话留在这儿, 或者留进 memory。
+ *
+ * 目前字模里有, 值得记一笔的: 'x' 是给示波器屏那些 "scope x16" 用的, 靠
+ * texts.xml 的 oscScopeFmt / oscTimeMs / oscTimeUs 三条喂进去的。 */
 const touchgfx::Unicode::UnicodeChar HEX_DIGIT[16] =
 {
     '0', '1', '2', '3', '4', '5', '6', '7',

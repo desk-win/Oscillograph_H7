@@ -61,6 +61,10 @@ protected:
     touchgfx::TextAreaWithOneWildcard ch2frequency;
     touchgfx::TextAreaWithOneWildcard ch1vpp;
     touchgfx::TextAreaWithOneWildcard phase;
+    touchgfx::TextAreaWithOneWildcard ch1mode_value;
+    touchgfx::TextAreaWithOneWildcard ch2mode_value;
+    touchgfx::TextArea ch1mode;
+    touchgfx::TextArea ch2mode;
 
     /*
      * Wildcard Buffers
@@ -75,6 +79,10 @@ protected:
     touchgfx::Unicode::UnicodeChar ch1vppBuffer[CH1VPP_SIZE];
     static const uint16_t PHASE_SIZE = 20;
     touchgfx::Unicode::UnicodeChar phaseBuffer[PHASE_SIZE];
+    static const uint16_t CH1MODE_VALUE_SIZE = 20;
+    touchgfx::Unicode::UnicodeChar ch1mode_valueBuffer[CH1MODE_VALUE_SIZE];
+    static const uint16_t CH2MODE_VALUE_SIZE = 20;
+    touchgfx::Unicode::UnicodeChar ch2mode_valueBuffer[CH2MODE_VALUE_SIZE];
 
 private:
 

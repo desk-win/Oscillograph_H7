@@ -51,6 +51,27 @@ public:
     virtual void traceUpdated(const uint16_t* ch1, const uint16_t* ch2,
                               bool fresh1, bool fresh2);
 
+    /**
+     * 编码器转过 delta 格 (来自 ModelListener)。转发给 Model, 由它按"当前选中
+     * 哪一路、调时基还是调倍数"改值, 然后把新的界面文字交给 View。
+     */
+    virtual void encoderTurned(int16_t delta);
+
+    /**
+     * 编码器上那个开关**短按**: 换选中哪一路 (CH1 ↔ CH2)。
+     */
+    virtual void encoderPressed();
+
+    /**
+     * 编码器上那个开关**长按**: 换当前这一路调时基还是调放大倍数。
+     */
+    virtual void encoderLongPressed();
+
+    /**
+     * 进屏时把界面上的模式文字摆成 Model 里记的那份 —— 切屏回来时不会丢。
+     */
+    void updateModeText();
+
 private:
     OscillographPresenter();
 

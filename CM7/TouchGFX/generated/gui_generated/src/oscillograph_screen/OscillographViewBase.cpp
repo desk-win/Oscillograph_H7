@@ -176,6 +176,36 @@ OscillographViewBase::OscillographViewBase() :
     phase.resizeToCurrentText();
     phase.setTypedText(touchgfx::TypedText(T___SINGLEUSE_MVEX));
     add(phase);
+
+    ch1mode_value.setXY(588, 446);
+    ch1mode_value.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
+    ch1mode_value.setLinespacing(0);
+    ch1mode_valueBuffer[0] = 0;
+    ch1mode_value.setWildcard(ch1mode_valueBuffer);
+    ch1mode_value.resizeToCurrentText();
+    ch1mode_value.setTypedText(touchgfx::TypedText(T___SINGLEUSE_X9ZI));
+    add(ch1mode_value);
+
+    ch2mode_value.setXY(353, 446);
+    ch2mode_value.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
+    ch2mode_value.setLinespacing(0);
+    ch2mode_valueBuffer[0] = 0;
+    ch2mode_value.setWildcard(ch2mode_valueBuffer);
+    ch2mode_value.resizeToCurrentText();
+    ch2mode_value.setTypedText(touchgfx::TypedText(T___SINGLEUSE_UD7V));
+    add(ch2mode_value);
+
+    ch1mode.setXY(530, 446);
+    ch1mode.setColor(touchgfx::Color::getColorFromRGB(24, 200, 219));
+    ch1mode.setLinespacing(0);
+    ch1mode.setTypedText(touchgfx::TypedText(T___SINGLEUSE_J105));
+    add(ch1mode);
+
+    ch2mode.setXY(294, 446);
+    ch2mode.setColor(touchgfx::Color::getColorFromRGB(212, 180, 19));
+    ch2mode.setLinespacing(0);
+    ch2mode.setTypedText(touchgfx::TypedText(T___SINGLEUSE_RPMB));
+    add(ch2mode);
 }
 
 OscillographViewBase::~OscillographViewBase()

@@ -2,6 +2,7 @@
 #include <gui/model/ModelListener.hpp>
 #include "osc_probe.h"
 #include "encoder.h"
+#include "oscillograph.h"   /* M7_OSC_SetFrontend —— 换放大倍数 (引脚在 CM4 那边) */
 
 /* ===========================================================================
  * 分半开关 —— 只用来定位"卡在哪", 定位完请都改回 0
@@ -27,11 +28,28 @@
  * 探针本身不在这里实现, 这里只负责在正确的时刻取值。
  * ========================================================================= */
 
+/* 初始化列表的顺序必须和 Model.hpp 里**成员声明的顺序**一致, 否则 -Wreorder
+ * 会警告 (而且真跑起来是按声明顺序初始化的, 列表写成什么样都没用)。 */
 Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
                  committedProtoMode(LOG_PROTO_UART), draftProtoMode(LOG_PROTO_UART),
+                 oscSelected(OSC_TRACE_CH1),
                  logicDecodeReq(false), logicDecodedSeq(0u)
 {
     OSC_Probe_Init();
+
+    /* 编码器的初始状态: 选中 CH1, 两路都是"调时基", 放大倍数都是 X1。
+     *
+     * 时基档位不在这儿初始化 —— 它存在 oscillograph_trace.c 的 s_tb_idx 里,
+     * 那边有静态初值 (OSC_TB_DEFAULT), 这里再"初始化"一遍反而会变成两个真相。
+     *
+     * 放大倍数在这儿存一份是对的: 它是纯界面状态, CM4 那边只是执行机构。X1 要
+     * 和 CM4 ctrl_defaults() 里的 0 (也是 X1) 以及 CM4 main.c 开机那两句
+     * OSC_Chx_Multiple(1, 1) 对上 —— 三处都是 X1, 所以开机不用动任何引脚。 */
+    for (int c = 0; c < 2; c++)
+    {
+        oscMode[c] = OSC_MODE_TIME;
+        oscGain[c] = OSC_GAIN_DEFAULT;
+    }
 
     /* 解码层的默认配置 (UART + 设置屏候选值里第一个)。必须赶在任何人调
      * LOG_Analyze_Run() 之前跑过 —— 那要等到用户点进 Logic_Data 屏了, 所以
@@ -237,6 +255,95 @@ bool Model::isRunning(osc_trace_ch_t ch) const
     return OSC_Trace_IsRunning(ch) != 0;
 }
 
+/* ===========================================================================
+ * 示波器屏的编码器 —— 短按换通道, 长按换调什么, 转动改值
+ *
+ * 状态怎么分家
+ *   时基那一份存在 oscillograph_trace.c 里 (s_tb_idx): 换档要清触发锁存, 而
+ *   锁存是那边的私有状态, 隔着 Model 去清很别扭。这里只是转发 + 记一个"当前
+ *   在调哪一路、调什么"的界面状态。
+ *
+ *   放大倍数那一份就在这儿 (oscGain): 它是一个纯粹的"用户设置", 和抽点那套
+ *   没有任何关系, 唯一的作用是往共享块里写一个字让 CM4 去摆 MUX 引脚。
+ *
+ * 两路各调各的 —— 短按切的是"编码器现在管哪一路", 切过去的瞬间另一路停在原
+ * 值上不动。
+ * ========================================================================= */
+
+/* 初始状态 (选中 CH1, 调时基, 两路都是 X1) 在构造函数里给 —— 见那边。 */
+
+void Model::turnOscEncoder(int16_t delta)
+{
+    if (delta == 0) return;                 /* 调用方本来就只在非 0 时才叫, 兜一下 */
+
+    const uint32_t ch = oscSelected;
+
+    if (oscMode[ch] == OSC_MODE_SCOPE)
+    {
+        /* 倍数档: 0..7 → X1..X128。夹到边界 (不回绕): 转到 X128 就该停住, 再
+         * 往右一把跳回 X1 的话用户会以为"增益炸了"。
+         *
+         * 夹完还是原值就什么都不做 —— 尤其不要白写一遍共享块: 那会让 CM4 那边
+         * 的继电器/模拟开关再动一次 (frontend_poll 是按"和上一轮不一样"才动的,
+         * 但我们写下去的值没变它本来就不动; 这里是省掉一次跨核写的开销)。 */
+        int32_t g = (int32_t)oscGain[ch] + (int32_t)delta;
+        if (g < 0) g = 0;
+        if (g > (int32_t)OSC_GAIN_STEPS - 1) g = (int32_t)OSC_GAIN_STEPS - 1;
+
+        if ((uint32_t)g != oscGain[ch])
+        {
+            oscGain[ch] = (uint32_t)g;
+            M7_OSC_SetFrontend(ch, (uint32_t)g);
+        }
+    }
+    else
+    {
+        /* 时基档: 上下界和"值没变就不动"都在 OSC_Trace_SetTimebase 里 (见那边
+         * 的说明 —— 它还要负责清触发锁存)。 */
+        OSC_Trace_SetTimebase((osc_trace_ch_t)ch,
+                              OSC_Trace_GetTimebase((osc_trace_ch_t)ch) + (int)delta);
+    }
+}
+
+void Model::toggleOscSelection()
+{
+    /* 就在两路之间跳。没有第三路, 所以直接取反。 */
+    oscSelected ^= 1u;
+}
+
+void Model::toggleOscMode()
+{
+    const uint32_t ch = oscSelected;
+    oscMode[ch] = (oscMode[ch] == OSC_MODE_TIME) ? OSC_MODE_SCOPE : OSC_MODE_TIME;
+}
+
+void Model::getOscUiState(osc_ui_state_t* out) const
+{
+    out->selected = (uint8_t)oscSelected;
+
+    for (uint32_t c = 0u; c < 2u; c++)
+    {
+        out->mode[c] = (uint8_t)oscMode[c];
+        out->gain[c] = (uint8_t)oscGain[c];
+        out->tb[c]   = (uint8_t)OSC_Trace_GetTimebase((osc_trace_ch_t)c);
+    }
+}
+
+void Model::syncOscUi()
+{
+    /* 进屏时把 Model 记得的设置重新推一遍。正常情况下是白做 —— 但两核是各
+     * 自独立复位的 (调试时经常只烧一个核), 那边 osc_ctrl 里的 cfg_gain_* 可能
+     * 还是上一次上电留下的值, 而 CM4 只有"和上一轮不一样"才会动 MUX 引脚
+     * (frontend_poll)。不推这一下的话表现是"屏幕写着 X1, 实际还是上次那个倍
+     * 数"—— 而且怎么转编码器都只在错的基准上加减, 极难查。
+     *
+     * 时基那边不用推: 档位存在 CM7 自己的 osc_trace 里, 和 CM4 无关。 */
+    for (uint32_t c = 0u; c < 2u; c++)
+    {
+        M7_OSC_SetFrontend(c, oscGain[c]);
+    }
+}
+
 void Model::tick()
 {
     /* 帧周期探针放在最前面 —— 没在采集的时候也要量, 那是"不卡"的基准值,
@@ -283,22 +390,43 @@ void Model::tick()
         }
     }
 
-    /* ---- 编码器上那个开关 (长按 = 切"调时基 / 滚窗口"两种模式) ----
+    /* ---- 编码器上那个开关 ----
      *
      * 每个 tick 都调, 不用卡节拍: Encoder_Key 内部按 HAL_GetTick 的毫秒计时
      * (LONG_PRESS_TIME_MS), 不数调用次数 —— 这一帧是 16.7 ms 还是 20 ms 都不
      * 影响长按判多久。
      *
-     * 单击 (KEY_EVENT_PRESS) 直接丢掉, 不派发: 目前没有哪一屏要用它。
+     * 短按和长按都要派发: 逻辑屏只用长按 (切"调时基/滚窗口"), 示波器屏两个都
+     * 用 (短按换选中哪一路, 长按换调时基还是调倍数)。Encoder_Key() 是分开判的
+     * —— 长按到点就直接返回 LONGPRESS, 不会先给一次 PRESS —— 所以同一次按下
+     * 只会走到其中一个分支, 不会"短按和长按都触发一遍"。
+     *
+     * 一次只调一次 Encoder_Key(): 那是个状态机, 事件是**当场判出来的**, 不是存
+     * 在队列里等人取。长按那一支把 longpress 置上再返回, 单击那一支把状态机推
+     * 回 RELEASE 再返回 —— 所以同一 tick 里调第二次只会拿到 KEY_EVENT_RELEASE,
+     * 事件本身已经过去了。
      *
      * 和 encoderTurned 一套派发: 收到它的恒是当前活动屏, 别的屏拿到的是默认空
-     * 实现, 等于把这下长按丢掉 —— 这正是想要的, 只有逻辑屏有两种模式可切。
+     * 实现, 等于把这下按键丢掉 —— 这正是想要的。
      *
      * 放在 LOG_Trace_Poll() 前面: 切完模式不需要重算那一屏 (画面不变), 但跟在
      * 后面的 Poll 顺手就把这一帧该出的图出了, 顺序上不欠任何东西。 */
-    if (Encoder_Key() == KEY_EVENT_LONGPRESS && modelListener != 0)
+    if (modelListener != 0)
     {
-        modelListener->encoderLongPressed();
+        switch (Encoder_Key())
+        {
+        case KEY_EVENT_PRESS:
+            modelListener->encoderPressed();
+            break;
+
+        case KEY_EVENT_LONGPRESS:
+            modelListener->encoderLongPressed();
+            break;
+
+        default:
+            /* KEY_EVENT_RELEASE: 绝大多数 tick 都走这儿 (没按, 或者按着的过程中) */
+            break;
+        }
     }
 
     /* 逻辑分析仪: 采半帧、找跳变、写记录全在 HSEM 中断里做完了 (和示波器同一种
@@ -407,13 +535,21 @@ void Model::tick()
      *    不计。 */
     OSC_Trace_Poll();
 
-    /* ② 抽点重画: 两个通道一共读 16384 个 word, 约 650 µs, 所以节流到 20 Hz。 */
+    /* ② 抽点重画: 基准档两个通道一共读 16384 个 word, 约 650 µs, 所以节流到
+     *    20 Hz。档位越慢读得越多 (W=256 时 10.4 ms, 塞进一帧会明显顿一下), 所以
+     *    真正的分频数按当前档位取, 见 OSC_Trace_RefreshTicks()。
+     *
+     *    取的是"两路里在跑的那个较大值", 转编码器换档之后下一帧就跟着变 ——
+     *    tickDiv 是这一帧开始时减的, 换档那一帧最多多跑一次旧节奏, 无所谓。
+     *
+     *    -1 是因为 tickDiv 是"还要再等几帧": 减到 0 的那一帧就该画了, 写回时给
+     *    的必须是"距下一次还有几帧", 也就是 N-1。恒 >= 1, 不会下溢。 */
     if (tickDiv > 0)
     {
         tickDiv--;
         return;
     }
-    tickDiv = OSC_TRACE_REFRESH_TICKS - 1u;
+    tickDiv = OSC_Trace_RefreshTicks() - 1u;
 
     const uint32_t tBuild = OSC_PROBE_CYC;
 #if OSC_DBG_SKIP_BUILD

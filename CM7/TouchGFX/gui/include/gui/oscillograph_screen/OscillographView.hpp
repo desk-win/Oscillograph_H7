@@ -117,6 +117,18 @@ public:
     void updateTrace(const uint16_t* ch1, const uint16_t* ch2,
                      bool fresh1, bool fresh2);
 
+    /**
+     * 把右下角两个模式文字区按 Model 的设置重写一遍。
+     *
+     * 一行写"这一路现在调的是什么 + 值", 例如 "time 2.62ms" / "scope x16";
+     * 选中那一路的**文字变成亮蓝 18C8DB**, 没选中的是黑的。行首那个 "CH1:" /
+     * "CH2:" 标签按通道各有固定颜色 (生成代码里配的), 这里不动 —— 那是"这是
+     * 哪一路"的标记, 和"编码器现在管哪一路"是两回事, 混在一起会看不懂。
+     *
+     * 进屏时和每次编码器动作之后都调, 代价可以忽略 (两个短字符串)。
+     */
+    void updateModeText(const osc_ui_state_t& st);
+
 protected:
     /* 波形就画在这里面 (盖在原来两个折线图的位置上)。
      * 加在构造函数里而不是 setupScreen() —— add() 是增量的, 每次进界面再加
@@ -145,6 +157,19 @@ protected:
      */
     touchgfx::Callback<OscillographView, const touchgfx::AbstractButton&> acquireCallback;
     void acquireCallbackHandler(const touchgfx::AbstractButton& src);
+
+    /**
+     * 写一个模式文字区 —— 两个（CH1 / CH2）形状完全一样, 只有控件和缓冲不同。
+     *
+     * ch 决定取哪一路的设置、决定"选中没有"。buffer/size 得一起传进来: 那两个
+     * 通配缓冲区是 ViewBase 里的 protected 成员, 名字分别是 ch1mode_valueBuffer /
+     * ch2mode_valueBuffer, 这里没法用下标取。
+     *
+     * 这里**没有**标脏 —— 调用方两个都写完之后统一标一次 (box3), 理由见 .cpp。
+     */
+    void setModeText(touchgfx::TextAreaWithOneWildcard& ta,
+                     touchgfx::Unicode::UnicodeChar* buffer, uint16_t bufferSize,
+                     const osc_ui_state_t& st, uint32_t ch);
 };
 
 #endif // OSCILLOGRAPHVIEW_HPP

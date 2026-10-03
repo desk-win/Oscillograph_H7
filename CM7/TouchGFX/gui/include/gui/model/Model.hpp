@@ -85,6 +85,47 @@ public:
         return traceY[ch & 1];
     }
 
+    /* =======================================================================
+     * 示波器屏的编码器 —— 见 Model.cpp 里那一段的说明
+     *
+     * 短按换通道 (CH1 ↔ CH2), 长按换这一路调什么 (时基 ↔ 放大倍数), 转动改值。
+     * 编的是**当前选中那一路**的设置, 另一路不动。
+     * ======================================================================= */
+
+    /**
+     * 编码器转过 delta 格 (正 = 顺时针): 按当前选中那一路的当前目标改值。
+     *
+     * 时基 → OSC_Trace_SetTimebase (上下界、清触发锁存在那边); 倍数 → 写共享
+     * 控制块, 引脚由 CM4 摆 (见 oscillograph.h 的 M7_OSC_SetFrontend)。
+     *
+     * 两个方向都是"往上转 = 变大": 时基变慢、倍数变大。到底哪个方向符合直觉是
+     * 硬件接线的锅, 要反待在 Encoder_Increment 那一层反, 不要在这儿加负号 ——
+     * 不然逻辑屏和示波器屏的转动方向会不一致。
+     */
+    void turnOscEncoder(int16_t delta);
+
+    /** 短按: 在两个通道之间跳, 换"编码器现在管哪一路"。 */
+    void toggleOscSelection();
+
+    /** 长按: 换当前这一路是调时基还是调放大倍数。 */
+    void toggleOscMode();
+
+    /**
+     * 把界面要显示的那一份设置整个取出来 —— 两个文本区的内容全靠它。
+     *
+     * 时基档位是从 oscillograph_trace.c 现取的 (真相在那边), 不是 Model 记的。
+     */
+    void getOscUiState(osc_ui_state_t* out) const;
+
+    /**
+     * 把 Model 记得的设置重新推给硬件。**进示波器屏时调一次**。
+     *
+     * 兜的是"两核各自独立复位"那种情况: CM4 那边 osc_ctrl 里的 cfg_gain_* 可能
+     * 还留着上一次上电的值, 而它的 frontend_poll 只在值变了的时候才动引脚。不
+     * 推这一下的话屏幕写着 X1、实际倍数还是上次那个。详见 Model.cpp。
+     */
+    void syncOscUi();
+
     /* ---- 逻辑分析仪 ---- */
 
     /**
@@ -272,6 +313,21 @@ protected:
      * 进屏时 beginLogicEdit() 从已提交那份整个拷过来, 按键改的都只是它。 */
     uint32_t draftProtoMode;
     uint8_t  draftCfgVal[LOG_PROTO_COUNT][LOG_PROTO_CFG_ROWS];
+
+    /* ---- 示波器屏的编码器状态 ----
+     *
+     * 只被 TouchGFX 任务碰 (tick 里的派发和 Presenter 都在那个任务里), 不加锁。
+     *
+     * oscSelected 是"编码器现在管哪一路" (0 = CH1, 1 = CH2)。它不是"哪一路在采",
+     * 也和屏幕开关无关 —— 停着的那一路照样能被选中、能调, 只是调完看不出来
+     * (波形不刷)。这样切来切去不会因为"选中了一路停着的"而变成按了没反应。
+     *
+     * 两个数组都是每路一份: oscMode 是调时基还是调倍数, oscGain 是倍数档
+     * (0..OSC_GAIN_STEPS-1)。时的那个数组不在这儿 —— 真相在 oscillograph_trace.c,
+     * 那份要配合触发锁存一起维护, 分开存反而会不一致。 */
+    uint32_t oscSelected;
+    uint32_t oscMode[2];
+    uint32_t oscGain[2];
 
     /* ---- 协议解码 ---- */
 

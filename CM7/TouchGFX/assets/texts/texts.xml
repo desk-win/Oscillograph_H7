@@ -6,15 +6,18 @@
   <Texts>
     <TextGroup Id="Group1" />
     <TextGroup Id="Unsorted">
-      <!--
-        这条不显示在任何控件上, 唯一的作用是往字模里喂字符。
-        TouchGFX 的字体是拿 texts.xml 里这些实文本现生成的, 通配符占位符不算数 ——
-        20 号字原本只有 52 个字符, 连 'f' 和 'F' 都没有, 于是 logic_data 屏上任何
-        半个字节是 0xF 的数据都会画成空白。
-        改这条之前先看 Logic_DataView.cpp 里的 HEX_DIGIT。
-        现在喂的是: 十六进制那 16 个字, I2C 的 [ ], SPI 的 / 和那行 "mo/mi" 图例
-        用的 m o i。(冒号 CAN 用, 别的文本里本来就有。)
-      -->
+      <Text Id="__SingleUse_RPMB" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH2:</Translation>
+      </Text>
+      <Text Id="__SingleUse_J105" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">CH1:</Translation>
+      </Text>
+      <Text Id="__SingleUse_UD7V" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
+      <Text Id="__SingleUse_X9ZI" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">&lt;value&gt;</Translation>
+      </Text>
       <Text Id="hexDigits" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">0123456789abcdef[]/moi</Translation>
       </Text>
@@ -56,6 +59,15 @@
       </Text>
       <Text Id="modeScroll" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">scroll</Translation>
+      </Text>
+      <Text Id="oscTimeMs" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">time &lt;value&gt;ms</Translation>
+      </Text>
+      <Text Id="oscTimeUs" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">time &lt;value&gt;us</Translation>
+      </Text>
+      <Text Id="oscScopeFmt" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">scope x&lt;value&gt;</Translation>
       </Text>
       <Text Id="protoUart" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">UART</Translation>
