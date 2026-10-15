@@ -23,9 +23,12 @@
 #include "crc.h"
 #include "dma.h"
 #include "dma2d.h"
+#include "fatfs.h"
 #include "i2c.h"
 #include "ltdc.h"
 #include "mdma.h"
+#include "quadspi.h"
+#include "sdmmc.h"
 #include "usart.h"
 #include "gpio.h"
 #include "fmc.h"
@@ -174,6 +177,9 @@ Error_Handler();
   MX_FMC_Init();
   MX_I2C2_Init();
   MX_USART1_UART_Init();
+  MX_QUADSPI_Init();
+  MX_SDMMC1_SD_Init();
+  MX_FATFS_Init();
   MX_TouchGFX_Init();
   /* Call PreOsInit function */
   MX_TouchGFX_PreOSInit();

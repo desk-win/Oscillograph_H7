@@ -6,7 +6,7 @@
 **
 **
 **  Abstract    : Linker script for STM32H7 series
-**                1024Kbytes FLASH and 288Kbytes RAM
+**                512Kbytes FLASH and 288Kbytes RAM
 **
 **                Set heap size, stack size and stack location according
 **                to application requirements.
@@ -36,9 +36,13 @@ ENTRY(Reset_Handler)
 
 
 /* Specify the memory areas */
+/* Flash split (CM7 / CM4) is configured by hand: CubeMX's Memory Map tool
+ * records it in the .ioc but does not rewrite this linker script. Keep in sync
+ * with CM7/stm32h747xx_flash_CM7.ld and the CM4 boot address option byte
+ * (BOOT_CM4_ADD0 = 0x08180000) -- CM4 starts at the base of its own region. */
 MEMORY
 {
-FLASH (rx)      : ORIGIN = 0x08100000, LENGTH = 1024K
+FLASH (rx)      : ORIGIN = 0x08180000, LENGTH = 512K
 RAM (xrw)      : ORIGIN = 0x10000000, LENGTH = 192K
 RAM_D2 (xrw)    : ORIGIN = 0x30030000, LENGTH = 96K
 }

@@ -20,8 +20,6 @@
 #include "main.h"
 #include "adc.h"
 #include "dma.h"
-#include "fatfs.h"
-#include "sdmmc.h"
 #include "tim.h"
 #include "usb_device.h"
 #include "gpio.h"
@@ -131,8 +129,6 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_USB_DEVICE_Init();
-  MX_SDMMC1_SD_Init();
-  MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
   /* 模拟前端的开机状态: X1 + 直流。这两个参数要和 osc_ctrl 的 ctrl_defaults()
    * 里记的那份账对上 (那边有说明) —— 这里是真动手摆引脚的那一次。 */
