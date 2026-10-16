@@ -55,6 +55,13 @@ set(CMAKE_C_FLAGS_DEBUG "-O2 -g3")
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+# Re-link when the linker script changes.
+# The .ld only reaches the linker through the -T flag, which Ninja cannot see,
+# so without this an edited linker script leaves the build reporting
+# "no work to do" and the previously linked binary in place.
+set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
+    LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${STM32_LINKER_SCRIPT}")
+
 # Include mx-generated
 include("mx-generated.cmake")
 

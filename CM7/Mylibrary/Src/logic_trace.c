@@ -149,9 +149,11 @@ volatile uint32_t log_diag_gap_recs;
 volatile uint32_t log_diag_recs;
 volatile uint32_t log_diag_ts_span;
 
-/* ===========================================================================
- * 记录写入 (docs/log_plan.md §8.4)
- * ========================================================================= */
+/**
+*   @brief 把一条 8 字节的跳变记录追加到记录区尾部，是有跳变点的电平快照
+*   @param ts 时间戳
+*   @param smp 16位GPIO_IDR
+*/
 static void log_rec_write(uint32_t ts, uint32_t smp)
 {
     if (s_rec_count >= LOG_REC_MAX) {        /* 满 → 停止 */
@@ -171,12 +173,11 @@ static void log_rec_write(uint32_t ts, uint32_t smp)
     s_gap_pending = 0u;
 }
 
-/* ===========================================================================
- * 扫描一个半帧 (docs/log_plan.md §8.3)
- * ========================================================================= */
-
-/* 慢路径: 这一对样本里确实有跳变时才进来。用精确的"上一个样本"逐个判, 是就
- * 写一条记录 —— 快路径的 any 只是预筛, 它有假阳性 (不会漏, 见下面的推导)。 */
+/**
+*   @brief 只处理"这一对样本里可能藏着跳变"的 word，做精确判定并把跳变写成记录
+*   @param v 当前这个 32 位 word 的原始采样值，低半字 s0 是先采的、高半字 s1 是后采的
+*   @param idx s0的全局采样序号
+*/
 static void log_slow(uint32_t v, uint32_t idx, uint32_t any)
 {
     const uint32_t s0 = v & 0xFFFFu;
@@ -693,13 +694,6 @@ void LOG_Trace_Stop(void)
 
 void LOG_Trace_Clear(void)
 {
-    /* 先停。清一个正在被中断写的结构是没有意义的 —— 停了之后 OnHalfFrame
-     * 会在开头的 s_running 判断上直接返回。
-     *
-     * 严格说还有一个几微秒的窗口: 已经越过那个判断、正在 log_scan_half 里的
-     * 那一次通知会继续跑完, 可能在我们清完之后又写进一条记录。代价是 s_rec_count
-     * 变成 1、s_consumed 被推进 —— 下一个 LOG_Trace_Start 会把这一批全部重清,
-     * 所以不用为它加锁。 */
     LOG_Trace_Stop();
 
     /* 和 LOG_Trace_Start 开头那一批一一对应, 两边必须一起改。 */
@@ -776,11 +770,12 @@ void LOG_Trace_Turn(int delta)
  *
  * 归约 (记录 → 520 列) 不在这儿, 见 LOG_Trace_Poll。
  * ========================================================================= */
+ /**
+ *  @brief 读每个半帧，找跳变写记录，在硬件信号量中断里面调用
+ */
 void LOG_Trace_OnHalfFrame(void)
 {
-    /* 采集已经停了 (手动停 / 上次自动停), 而通知还在路上 —— 常见, 不是错。
-     * 不去清信号量: HAL 在进回调之前已经把 MISR 的位清掉、把 IER 的位关掉了,
-     * 重新打开是回调那边的事 (见 oscillograph.c)。 */
+    // 检查采集是否已经停止
     if (s_running == 0u) {
         return;
     }
