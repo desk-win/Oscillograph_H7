@@ -91,8 +91,20 @@ void HAL_SD_MspInit(SD_HandleTypeDef* sdHandle)
     GPIO_InitStruct.Alternate = GPIO_AF12_SDIO1;
     HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
+    /* SDMMC1 interrupt Init */
+    HAL_NVIC_SetPriority(SDMMC1_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(SDMMC1_IRQn);
   /* USER CODE BEGIN SDMMC1_MspInit 1 */
-
+    /* SDMMC1 的中断使能已经由 CubeMX 生成在上面 ("SDMMC1 interrupt Init",
+     * 抢占优先级 5, 对应 .ioc 里的 NVIC1.SDMMC1_IRQn), 这里不再重复设置。
+     *
+     * 只留一句提醒: 这个优先级不能再往小改。sd_diskio.c 的
+     * BSP_SD_ReadCpltCallback() / WriteCpltCallback() 里会调 osMessageQueuePut,
+     * 那是 FreeRTOS 的 FromISR API, 要求 ISR 优先级 >=
+     * configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY (= 5)。5 正好是下限, 合法。
+     *
+     * (当初这里是空的, 中断没使能, 表现是 "[SD] init -> MOUNT (fres=1)" 一直刷,
+     *  每次读写干等 30 秒超时。) */
   /* USER CODE END SDMMC1_MspInit 1 */
   }
 }
@@ -121,6 +133,8 @@ void HAL_SD_MspDeInit(SD_HandleTypeDef* sdHandle)
 
     HAL_GPIO_DeInit(GPIOD, GPIO_PIN_2);
 
+    /* SDMMC1 interrupt Deinit */
+    HAL_NVIC_DisableIRQ(SDMMC1_IRQn);
   /* USER CODE BEGIN SDMMC1_MspDeInit 1 */
 
   /* USER CODE END SDMMC1_MspDeInit 1 */
@@ -128,6 +142,10 @@ void HAL_SD_MspDeInit(SD_HandleTypeDef* sdHandle)
 }
 
 /* USER CODE BEGIN 1 */
+
+/* SDMMC1 的中断入口由 CubeMX 生成在 stm32h7xx_it.c 里
+ * (void SDMMC1_IRQHandler(void) { HAL_SD_IRQHandler(&hsd1); })。
+ * 这里以前自己定义过一份, 勾上 NVIC 重新生成之后就成了重复定义, 已删除。 */
 
 /* USER CODE END 1 */
 

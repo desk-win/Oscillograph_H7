@@ -42,6 +42,12 @@ void MX_SDMMC1_SD_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
+/* SDMMC1 的中断入口。函数体和声明本来由 CubeMX 生成 (stm32h7xx_it.c / .h), 在
+ * NVIC 面板里勾上 SDMMC1 global interrupt 之后就有了。这里再声明一份是给
+ * main.c 里那段 SD 自检用的: 它要把向量表里那一格和 &SDMMC1_IRQHandler 对一下,
+ * 确认中断真的接上了。两个声明完全一样, 放着不冲突。 */
+void SDMMC1_IRQHandler(void);
+
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

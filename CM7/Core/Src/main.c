@@ -42,6 +42,8 @@
 #include "oscillograph.h"
 #include "logic_trace.h"
 #include "encoder.h"
+#include "sd.h"
+#include "uart_printf.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
