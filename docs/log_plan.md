@@ -920,10 +920,15 @@ Model::tick()  周期 = 16.7 ms  (60 Hz)
 | 信号量号 | 1 | **2** |
 | 发送 | CM4 `osc_scan_half` 末尾 take+release | CM4 `log_half_done()` 末尾 take+release |
 | 落点 | `HAL_HSEM_FreeCallback` → `M7_OSC_Poll()` | `HAL_HSEM_FreeCallback` → `LOG_Trace_OnHalfFrame()` |
-| 搬运 | MDMA 把半帧搬去 SDRAM | 就地扫描 D2 里那一格 |
+| 搬运 | MDMA 把半帧搬去 SDRAM | 就地扫描 D2 里那一格 (在扫描任务里, 见下) |
 
 **take+release 就是"发通知"这个动作本身，不是抢锁** —— 那个信号量没有谁在等，只是借它把
 CM7 的 `HSEM1_IRQn` 拉起来一次。写法和 `osc_scan_half` 末尾完全一样。
+
+> **改动记录 (2026-10-16)**：逻辑这一路的消费已从"中断里就地扫"改成"中断只置位 +
+> `LogicScan_Task` 任务里扫"（见 `logic_trace.c`）。原因：半帧 409.6 µs 一次、每次几十~几百 µs，
+> 挂在 prio 5 的中断上会把 prio 15 的 SysTick/TIM7 一起挡住（`HAL_GetTick` 都不走）。
+> 期限不变，超时仍记 `log_diag_gap_recs`；§8.3 里"扫描在中断里"的描述以此为准。
 
 #### 中断线是**每核一条**，不是每个信号量一条 —— 这是最容易踩的地方
 

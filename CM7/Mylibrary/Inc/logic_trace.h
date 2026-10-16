@@ -21,14 +21,15 @@ extern "C" {
  *   CM4 用 TIM2 + DMA2 把 GPIOG->IDR 采进 D2 的 32 KB 双缓冲, 每个半帧
  *   (16 KB = 8192 个样本 = 409.6 µs @20 MSa/s) 完成后把 frame_seq 加一、
  *   并 take+release 一次 2 号信号量;
- *   CM7 在 HSEM1_IRQn 里被这一下叫醒 (LOG_Trace_OnHalfFrame), 读掉那一格、
- *   找跳变点、把 8 字节一条的记录写进 D1 AXI SRAM;
+ *   中断 (HSEM1_IRQn) 里只置位叫醒扫描任务 (LOG_Trace_NotifyFromISR), 任务里
+ *   读掉那一格、找跳变点、把 8 字节一条的记录写进 D1 AXI SRAM;
  *   记录满或者空闲超时之后把记录抽成 LOG_TRACE_COLS 列交给屏幕 (LOG_Trace_Poll,
  *   在 TouchGFX 的 tick 里)。
  *
- * ── 为什么扫描在中断里、归约在 tick 里 ──
+ * ── 为什么扫描做成任务、归约留在 tick 里 ──
  * 扫描有硬期限: 半帧 409.6 µs, 整块缓冲 819.2 µs, 慢了 DMA 就把那一格绕回来
- * 覆盖掉。挂 60 Hz 的 tick 上就是每 41 格才看 1 格。
+ * 覆盖掉。挂 60 Hz 的 tick 上就是每 41 格才看 1 格; 放中断里则会把 prio 15 的
+ * SysTick/TIM7 一起挡住, 所以它有独立的最高优先级任务 (LogicScan_Task)。
  * 归约 (记录 → 520 列) 没有期限 (采完才做一次), 而且它写的那两片列数组会被
  * 屏幕任务读走 —— 放在中断里就得考虑"读到一半被下一次采集覆盖"。
  *
@@ -75,12 +76,15 @@ void LOG_Trace_Init(void);
  * 推理就没有起点 (docs/log_plan.md §2.5)。
  *
  * 重复调用没有副作用 (已经在跑就直接返回)。
+ * 请求式: 记录 0 和 cfg_* 的实际下发在扫描任务里 (scan_do_start); 它优先级
+ * 更高, 请求一发就抢占执行, 调用方看到的效果和同步一样。
  */
 void LOG_Trace_Start(void);
 
 /**
  * 断开采集开关 (cfg_run = 0)。CM4 那边看到就停 TIM2 + DMA 并把 LOG_EN 拉低。
  * 已经采到的记录不动 —— 出图是 GetCols 的事。
+ * 请求式: 实际由扫描任务执行 (同上, 微秒级生效)。
  */
 void LOG_Trace_Stop(void);
 
@@ -166,8 +170,8 @@ void LOG_Trace_ToggleViewMode(void);
 void LOG_Trace_Turn(int delta);
 
 /**
- * 中断上下文: CM4 每完成一个半帧就在 HSEM1_IRQn 里叫一次这个函数
- * (由 CM7 的 HAL_HSEM_FreeCallback 调, 见 Mylibrary/Src/oscillograph.c)。
+ * 由扫描任务调用: CM4 每完成一个半帧置一次 LOG_REQ_HALF, 中断侧只做这一件事
+ * (见 Mylibrary/Src/oscillograph.c 的 HAL_HSEM_FreeCallback)。
  *
  * 干的事: 判有没有追丢 (打 GAP 标志) → 扫那一格 → 把跳变点写成记录 →
  * 判记录满 / 空闲超时, 是就停下来并置一个"该出图了"的记号。
@@ -178,6 +182,14 @@ void LOG_Trace_Turn(int delta);
  * 调用周期必须跟得上半帧周期 (409.6 µs), 否则记进 log_diag_gap_recs。
  */
 void LOG_Trace_OnHalfFrame(void);
+
+/**
+ * 中断上下文 (HAL_HSEM_FreeCallback 调): 只置一个线程标志叫醒扫描任务。
+ *
+ * 调用方所在中断的优先级数值必须 >= configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY
+ * (= 5)。这是本工程唯一一处从中断里调 RTOS API, HSEM1_IRQn 现在正是 5。
+ */
+void LOG_Trace_NotifyFromISR(void);
 
 /**
  * 每个 tick 调一次 (TouchGFX 的 Model::tick)。
@@ -246,6 +258,11 @@ extern volatile uint32_t log_diag_gap_recs;
 extern volatile uint32_t log_diag_recs;
 /** 最近一次采集覆盖的采样点数 (= 最后一条记录的 ts) */
 extern volatile uint32_t log_diag_ts_span;
+
+/** 检测点: 最近一次 / 最大一次半帧扫描耗时 (DWT 周期, ÷480 是 µs)。
+ *  只记数不打印 (打印会拖慢采集); LOG_SCAN_DIAG = 0 时这两个符号不存在。 */
+extern volatile uint32_t log_scan_diag_cyc;
+extern volatile uint32_t log_scan_diag_max_cyc;
 
 #ifdef __cplusplus
 }

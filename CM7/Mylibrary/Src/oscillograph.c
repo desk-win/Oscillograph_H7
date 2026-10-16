@@ -123,10 +123,15 @@ void HAL_HSEM_FreeCallback(uint32_t SemMask)
     if ((SemMask & LOG_HSEM_MASK) != 0u) {
         /* 同上: 先武装, 否则逻辑采集只会工作一次。
          *
-         * 顺序上和示波器那一段无关 —— 两个半帧的消费互不依赖, 谁先谁后都行。 */
+         * 顺序上和示波器那一段无关 —— 两个半帧的消费互不依赖, 谁先谁后都行。
+         * 这里只置位叫醒扫描任务 (跳变检测在任务里做)。
+         *
+         * 注意: 这是本工程唯一一处从**中断**里调 RTOS API, 中断优先级数值必须
+         * >= configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY (= 5)。HSEM1_IRQn 现在
+         * 正是 5 (M7_OSC_Init 里设的), 别改小。 */
         HAL_HSEM_ActivateNotification(LOG_HSEM_MASK);
 
-        LOG_Trace_OnHalfFrame();
+        LOG_Trace_NotifyFromISR();
     }
 }
 

@@ -18,22 +18,23 @@
  * ── 为什么分两个入口 ──
  * 消费这一侧拆成了两半, 分界就是"有没有硬期限":
  *
- *   LOG_Trace_OnHalfFrame()  中断上下文, CM4 每完成一个半帧叫一次
+ *   LOG_Trace_OnHalfFrame()  扫描任务 (LogicScan_Task) 里, 每半帧一次
  *                            扫那一格 + 写记录 + 判满/超时。**有**期限:
  *                            409.6 µs 之后 DMA 就绕回来盖掉这一格了。
  *   LOG_Trace_Poll()         每个 tick 一次 (TouchGFX 的 Model::tick)
  *                            记录 → 520 列 + LED + 启动门。**没有**期限,
  *                            采完才做一次, 而且那两片列数组是给屏幕任务读的。
  *
- * 中断和 tick 之间只传一个单调递增的记号 s_build_seq: 中断里加一, tick 里
- * 发现变了就去归约。中断绝不碰屏幕要读的东西, tick 也绝不碰采集状态机 ——
- * 两边各管一段, 不用互斥。
+ * 中断只置位 (LOG_Trace_NotifyFromISR), 扫描在任务里做; 任务和 tick 之间只传
+ * 一个单调递增的记号 s_build_seq: 任务里加一, tick 里发现变了就去归约。任务
+ * 绝不碰屏幕要读的东西, tick 也绝不碰采集状态机 —— 两边各管一段, 不用互斥。
  * ========================================================================= */
 
 #include "logic_trace.h"
 #include "sharedconfig.h"
 #include "oscillograph_trace.h"     /* 互斥: OSC_Trace_Stop */
 #include "main.h"
+#include "cmsis_os2.h"
 #include "stm32h7xx_hal_gpio.h"
 #include <stdint.h>
 
@@ -46,13 +47,33 @@
 /* 逻辑通道 1..8 → GPIOG 的位号 (LOG_CH_BIT)。这儿用不着 —— 这一层从头到尾都在
  * 原始掩码上干活, "第几个通道"是显示层 (LogicView.cpp) 的事。 */
 
-/* ---- 采集状态 (中断和 tick 都碰) ---- */
-static uint32_t s_running;       /* 中断里读, tick 里读: 只增删这一个闸 */
+/* ---- 采集状态: 只有扫描任务写, 其它上下文只读 ---- */
+static uint32_t s_running;       /* 采集闸: 中断/GUI 读 */
 static uint32_t s_consumed;      /* 已经处理到第几个半帧 */
 static uint32_t s_rec_count;     /* 已写下的记录条数 */
 static uint32_t s_last_ts;       /* 最后一条记录的 ts */
 static uint32_t s_gap_pending;   /* 下一次写记录时要打 GAP */
 static uint32_t s_full;          /* 记录区满了 */
+
+/* ---- 扫描任务的请求位: 中断/GUI 只置位, 扫描任务只清位 ---- */
+#define LOG_REQ_START  (1u << 0)
+#define LOG_REQ_STOP   (1u << 1)
+#define LOG_REQ_CLEAR  (1u << 2)
+#define LOG_REQ_HALF   (1u << 3)    /* 中断置: 有新半帧 */
+
+static osThreadId_t s_scan_task;
+static void LogicScan_Task(void *arg);
+static void scan_do_start(void);
+static void scan_do_stop(void);
+static void scan_do_clear(void);
+
+/* ---- 检测点: 每半帧扫描耗时 (DWT 周期, ÷480 是 µs)。只记数、不打印。
+ * 关掉 LOG_SCAN_DIAG 即整块消失, 不影响被测对象。 ---- */
+#define LOG_SCAN_DIAG  1
+#if LOG_SCAN_DIAG
+volatile uint32_t log_scan_diag_cyc;        /* 最近一次 */
+volatile uint32_t log_scan_diag_max_cyc;    /* 历史最大 */
+#endif
 
 /* 中断 → tick 的唯一一处通讯: "又有一次采集收工了, 该归约了"。
  *
@@ -157,7 +178,7 @@ volatile uint32_t log_diag_ts_span;
 static void log_rec_write(uint32_t ts, uint32_t smp)
 {
     if (s_rec_count >= LOG_REC_MAX) {        /* 满 → 停止 */
-        LOG_Trace_Stop();
+        scan_do_stop();
         s_full = 1u;
         return;
     }
@@ -230,7 +251,7 @@ static void log_scan_half(const uint32_t *w, uint32_t nwords, uint32_t base_inde
 
     for (uint32_t i = 0u; i < nwords; i++) {
         /* 记录区满了就没必要再扫 —— log_rec_write 会立刻返回, 但它每次都要
-         * 判一次满、而且第一下就调了 LOG_Trace_Stop()。密集信号下一个半帧能
+         * 判一次满、而且第一下就调了 scan_do_stop()。密集信号下一个半帧能
          * 有几十万次调用, 不在这里拦一道的话, 那半帧的时间全花在空转上。 */
         if (s_full != 0u) {
             break;
@@ -578,11 +599,24 @@ void LOG_Trace_Init(void)
     LOG_CTRL->cfg_run        = 0u;
     __DMB();
 
+    /* ---- 扫描任务 ----
+     * 必须先建任务再武装信号量, 否则第一个通知没有收件人。优先级必须高于
+     * TouchGFX (osPriorityAboveNormal1), 否则半帧来不及扫。 */
+    static const osThreadAttr_t scan_attr = {
+        .name       = "logicScan",
+        .priority   = osPriorityHigh1,
+        .stack_size = 1024,         /* 字节 */
+    };
+    s_scan_task = osThreadNew(LogicScan_Task, NULL, &scan_attr);
+    if (s_scan_task == NULL) {
+        Error_Handler();
+    }
+
     /* ---- 收下 2 号信号量 ----
      *
      * 和示波器那一路 (M7_OSC_Init 里的 OSC_HSEM_MASK) 是同一台机器: 打开这一位
      * 之后, CM4 那边 take+release 一次就会把 CM7 的 HSEM1_IRQn 拉起来, 中断里
-     * 的 HAL_HSEM_FreeCallback 再按掩码分派到这儿的 OnHalfFrame。
+     * 的 HAL_HSEM_FreeCallback 再按掩码分派到 LOG_Trace_NotifyFromISR。
      *
      * NVIC 那边不用动 —— HSEM 是**每核一条**中断线, 不是每个信号量一条, 1 号
      * 和 2 号都在 HSEM1_IRQn 上, 已经由 M7_OSC_Init 使能过了。 */
@@ -591,6 +625,9 @@ void LOG_Trace_Init(void)
     led_off();
 }
 
+/* ---- GUI 侧接口: 只置请求位、读快照 ----
+ * 记录相关的一切 (s_running / s_consumed / ... / LOG_CTRL->cfg_run) 只有扫描
+ * 任务写; s_ncols / s_span_idx / s_view_* 这些视图状态归 GUI。 */
 void LOG_Trace_Start(void)
 {
     if (s_running != 0u) {
@@ -603,29 +640,33 @@ void LOG_Trace_Start(void)
     OSC_Trace_Stop(OSC_TRACE_CH1);
     OSC_Trace_Stop(OSC_TRACE_CH2);
 
+    /* 新的一轮从整屏/开头开始 (上一轮的档位和滚动位置对新采集无意义) */
+    s_ncols          = 0u;
+    s_result_pending = 0u;
+    s_span_idx       = LOG_SPAN_FULL;
+    s_view_dirty     = 0u;
+    s_view_start     = 0u;
+
+    s_start_tick = HAL_GetTick();   /* 启动门的计时起点, 见 LOG_Trace_Poll */
+    s_led_on     = 0u;
+    led_off();                      /* LED 归 GUI, 任务/中断都不碰 */
+
+    /* 扫描任务优先级更高, 这一发它立刻抢占执行 —— 调用方看到的状态是同步的 */
+    osThreadFlagsSet(s_scan_task, LOG_REQ_START);
+}
+
+/* ---- 扫描任务内部: 记录状态的唯一写者 ---- */
+
+/* 起采: 清记录状态 → 写记录 0 → 打开 CM4 的采集 */
+static void scan_do_start(void)
+{
     s_consumed       = 0u;      /* CM4 的 log_start 会把 frame_seq 清零 */
     s_rec_count      = 0u;
     s_last_ts        = 0u;
     s_gap_pending    = 0u;
     s_full           = 0u;
-    s_ncols          = 0u;
-    s_result_pending = 0u;
 
-    /* 新的一轮从整屏开始 —— 上一轮放大到的档位对这一次的 s_last_ts 未必有意
-     * 义 (可能比这次采集还长), 留着的话开局就是一张莫名其妙的画面。
-     * s_view_dirty 一起清: 上一轮欠着的那次重算不该落到新采集头上。
-     * 窗口起点同理 —— 上一轮滚到哪儿对这一次毫无意义 (s_last_ts 换了个数,
-     * 不定式 s_view_start <= view_start_max() 都不一定还成立)。
-     *
-     * **视图模式不清**: 那是用户的偏好, 不是这一轮采集的状态。上一轮在滚动
-     * 模式, 这一轮接着在滚动模式。 */
-    s_span_idx       = LOG_SPAN_FULL;
-    s_view_dirty     = 0u;
-    s_view_start     = 0u;
-
-    /* 上一屏的记号不用清: s_build_seq 只增不减, tick 那边比的是"变没变"，
-     * 清成 0 反而可能和 s_built_seq 撞上而漏掉一次归约。 */
-    s_start_tick     = HAL_GetTick();   /* 启动门的计时起点, 见 LOG_Trace_Poll */
+    /* s_build_seq 不清: 只增不减, 清成 0 可能和 tick 的 s_built_seq 撞上而漏一次归约 */
 
     /* ---- 记录 0: 合上开关那一刻的电平, ts = 0 ----
      *
@@ -666,19 +707,11 @@ void LOG_Trace_Start(void)
     __DMB();
 
     s_running = 1u;
-    s_led_on  = 0u;
-    led_off();                          /* 还没见过跳变, 先灭着 */
 }
 
-/**
-*   @brief 停采。可以从**中断里**调 (记录满是在 log_rec_write 里就地停的)
-*
-*   @note  这里不碰 LED。LED 的驱动权整个归 tick (LOG_Trace_Poll), 中断里再插
-*          一手的话两边就是对同一个引脚各写各的 —— 中断在 tick 的"判断"和
-*          "写引脚"之间插进来的话, 那一次翻转会被 tick 随后的写入吃掉, 表现是
-*          灯偶尔不灭。
-*/
-void LOG_Trace_Stop(void)
+/* 停采。扫描任务内部直接调 (记录满 / 空闲超时); 外部走下面的请求接口。
+ * 这里不碰 LED —— 驱动权归 GUI (LOG_Trace_Poll / LOG_Trace_Start)。 */
+static void scan_do_stop(void)
 {
     if (s_running == 0u) {
         return;
@@ -692,19 +725,13 @@ void LOG_Trace_Stop(void)
     s_running = 0u;
 }
 
+void LOG_Trace_Stop(void)
+{
+    osThreadFlagsSet(s_scan_task, LOG_REQ_STOP);
+}
+
 void LOG_Trace_Clear(void)
 {
-    LOG_Trace_Stop();
-
-    /* 和 LOG_Trace_Start 开头那一批一一对应, 两边必须一起改。 */
-    s_consumed    = 0u;
-    s_rec_count   = 0u;
-    s_last_ts     = 0u;
-    s_gap_pending = 0u;
-    s_full        = 0u;
-    s_prev16      = 0u;
-    s_prev32      = 0u;
-
     /* 已经算好的那一屏也得丢掉。留着的话 tick 会把 s_build_seq 当成"有新结果"
      * 再归约一次, 屏幕刚被 Cancel 清空就又画上旧波形。
      *
@@ -721,6 +748,65 @@ void LOG_Trace_Clear(void)
     s_span_idx       = LOG_SPAN_FULL;
     s_view_dirty     = 0u;
     s_view_start     = 0u;
+
+    osThreadFlagsSet(s_scan_task, LOG_REQ_CLEAR);
+}
+
+/* 丢掉这一轮的结果 (扫描任务内部) */
+static void scan_do_clear(void)
+{
+    scan_do_stop();
+
+    s_consumed    = 0u;
+    s_rec_count   = 0u;
+    s_last_ts     = 0u;
+    s_gap_pending = 0u;
+    s_full        = 0u;
+    s_prev16      = 0u;
+    s_prev32      = 0u;
+}
+
+/* ===========================================================================
+ * 扫描任务 —— 记录状态的唯一写者
+ *
+ * 中断只置 LOG_REQ_HALF。不在中断里扫的原因: 半帧 409.6 µs 一次、每次几十~
+ * 几百 µs, 挂在 prio 5 的中断上会把 prio 15 的 SysTick/TIM7 一起挡住
+ * (HAL_GetTick 都不走)。放任务里节拍照常跑, 代价是会被 LTDC/DMA2D/tick 抢占
+ * 几十一百 µs —— 由整块缓冲 819.2 µs 的余量 + GAP 机制吸收。
+ * ========================================================================= */
+static void LogicScan_Task(void *arg)
+{
+    (void)arg;
+
+    for (;;) {
+        const uint32_t f = osThreadFlagsWait(LOG_REQ_START | LOG_REQ_STOP |
+                                             LOG_REQ_CLEAR | LOG_REQ_HALF,
+                                             osFlagsWaitAny, osWaitForever);
+
+        /* 命令优先于数据; STOP 先于 START (保守) */
+        if ((f & LOG_REQ_CLEAR) != 0u) { scan_do_clear(); continue; }
+        if ((f & LOG_REQ_STOP)  != 0u) { scan_do_stop();  }
+        if ((f & LOG_REQ_START) != 0u) { scan_do_start(); }
+
+        if ((f & LOG_REQ_HALF) != 0u) {
+#if LOG_SCAN_DIAG
+            /* 检测点: 整段扫描耗时 (含最后的判满/超时); DWT 由 OSC_Probe_Init 打开 */
+            const uint32_t t0 = DWT->CYCCNT;
+            LOG_Trace_OnHalfFrame();
+            const uint32_t d = DWT->CYCCNT - t0;
+            log_scan_diag_cyc = d;
+            if (d > log_scan_diag_max_cyc) log_scan_diag_max_cyc = d;
+#else
+            LOG_Trace_OnHalfFrame();
+#endif
+        }
+    }
+}
+
+/* 中断侧入口: 只置位, 不干活 */
+void LOG_Trace_NotifyFromISR(void)
+{
+    osThreadFlagsSet(s_scan_task, LOG_REQ_HALF);
 }
 
 int LOG_Trace_IsRunning(void)
@@ -759,10 +845,10 @@ void LOG_Trace_Turn(int delta)
 }
 
 /* ===========================================================================
- * 中断入口 —— 一个半帧一次
+ * 扫描入口 —— 一个半帧一次, 在扫描任务里跑
  *
- * 由 CM7 的 HAL_HSEM_FreeCallback 调 (Mylibrary/Src/oscillograph.c), 触发源是
- * CM4 在那个半帧的 HT/TC 里 take+release 的 2 号信号量。
+ * 触发源是 CM4 在那个半帧的 HT/TC 里 take+release 的 2 号信号量; 中断侧
+ * (HAL_HSEM_FreeCallback) 只置 LOG_REQ_HALF, 实际扫描在这里做。
  *
  * **期限**: 这个函数必须在下一个半帧完成之前跑完。半帧 409.6 µs, 整块缓冲绕
  * 一圈 819.2 µs, 慢过它 DMA 就把这 16 KB 盖掉了 —— 那就是真的丢数据 (会记进
@@ -771,7 +857,7 @@ void LOG_Trace_Turn(int delta)
  * 归约 (记录 → 520 列) 不在这儿, 见 LOG_Trace_Poll。
  * ========================================================================= */
  /**
- *  @brief 读每个半帧，找跳变写记录，在硬件信号量中断里面调用
+ *  @brief 读每个半帧，找跳变写记录 (由扫描任务调用)
  */
 void LOG_Trace_OnHalfFrame(void)
 {
@@ -782,7 +868,7 @@ void LOG_Trace_OnHalfFrame(void)
 
     /* ---- 等 CM4 真正开起来 ----
      *
-     * LOG_Trace_Start 只是把 cfg_run 置 1, CM4 要等它下一圈主循环才看到、才会
+     * scan_do_start 只是把 cfg_run 置 1, CM4 要等它下一圈主循环才看到、才会
      * 去清 frame_seq。在那之前 frame_seq 里是**上一次采集留下来的值**, 拿去当
      * "新数据"会去扫一块上一次的残留缓冲, 写出几条时间戳离谱的假记录 —— 而且
      * 它们的时间戳比后面所有真记录都大, 出图时会挤在最后几列上。
@@ -827,7 +913,7 @@ void LOG_Trace_OnHalfFrame(void)
     const uint32_t now_ts = fs * LOG_SAMPLE_HALF_SAMPS;
 
     if (s_full != 0u || (now_ts - s_last_ts) > LOG_IDLE_TIMEOUT_SAMPS) {
-        LOG_Trace_Stop();
+        scan_do_stop();
         s_build_seq++;
     }
 }
