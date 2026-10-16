@@ -27,6 +27,11 @@ void Logic_DataPresenter::cancelLogicData()
     model->clearLogicData();
 }
 
+void Logic_DataPresenter::saveLogicData()
+{
+    model->saveLogicToSd();
+}
+
 const log_ana_item_t* Logic_DataPresenter::getLogicItems(uint32_t* count)
 {
     return model->getLogicItems(count);

@@ -243,8 +243,9 @@ uint8_t LOG_Trace_GetRecs(const log_rec_t **recs, uint32_t *count,
  * 借用冻结的记录表 (任务上下文): 借用期间采集不许重开, Cancel 挂起到释放之后。
  * 解码/存卡这类"要读整片记录区"的活必须先借到它。
  *
- * 返回 0 = 借不到 (采集还在跑 / 已被借用 / 没有可解的数据)。
- * 借到之后必须配一次 LOG_Trace_ReleaseRecs()。
+ * 返回 0 = 借不到 (采集还在跑 / 没有可解的数据)。
+ * 借到之后必须配一次 LOG_Trace_ReleaseRecs()。借用是**计数**的: 解码和存卡可以
+ * 同时借同一张表 (都只读), 最后一个还回来才补做挂起的 Cancel。
  */
 int  LOG_Trace_BorrowRecs(const log_rec_t **recs, uint32_t *count, uint32_t *last_rec_ts);
 void LOG_Trace_ReleaseRecs(void);

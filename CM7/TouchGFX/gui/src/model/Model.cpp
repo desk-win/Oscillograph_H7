@@ -2,6 +2,7 @@
 #include <gui/model/ModelListener.hpp>
 #include "osc_probe.h"
 #include "encoder.h"
+#include "logic_save.h"    /* LOG_Save_Init / LOG_Save_Request */
 #include "oscillograph.h"   /* M7_OSC_SetFrontend —— 换放大倍数 (引脚在 CM4 那边) */
 
 /* ===========================================================================
@@ -61,6 +62,9 @@ Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
      * LOG_Analyze_Request() 之前跑过 —— 那要等到用户点进 Logic_Data 屏了, 所以
      * 这儿是最早也最合适的位置。它不碰任何硬件, 在 main() 之前跑是安全的。 */
     LOG_Analyze_Init();
+
+    /* 存卡任务的请求信号量 (任务本体在 freertos.c 里创建) */
+    LOG_Save_Init();
 
     for (int ch = 0; ch < 2; ch++)
     {
@@ -198,6 +202,13 @@ void Model::requestLogicDecode()
     /* 只置记号, 真正发请求在 tick 里 (见下面那一段) —— 采集还开着的时候代数
      * 还是 0, 那时候发出去会被当成"还没采过"丢掉。 */
     logicDecodeReq = true;
+}
+
+void Model::saveLogicToSd()
+{
+    /* 只通知: 借表 + 写卡在 logicSave 任务里做 (GUI 帧里一个文件操作都没有)。
+     * 存卡期间再按一次会被任务那边丢掉 —— 一次只写一份。 */
+    LOG_Save_Request();
 }
 
 const log_ana_item_t* Model::getLogicItems(uint32_t* count) const

@@ -134,6 +134,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/logic_trace.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/logic_analyze.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/sd.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/logic_save.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/encoder.c
 )
 

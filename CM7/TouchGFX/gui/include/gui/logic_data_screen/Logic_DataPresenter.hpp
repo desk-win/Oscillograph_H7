@@ -45,6 +45,12 @@ public:
     void cancelLogicData();
 
     /**
+     * Save 按键: 通知 Model 存卡 —— 真正写卡在 logicSave 任务里做,
+     * 这一屏按下就跳回 Logic (跳转是 View 自己调 application().goto...)。
+     */
+    void saveLogicData();
+
+    /**
      * 取上一次解码的结果, 给 View::setupScreen 用。
      *
      * 用在"这一轮采集早就解过了"的情形: 那时候 tick 不会再发 logicDataUpdated

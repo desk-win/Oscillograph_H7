@@ -33,6 +33,7 @@
 #include "osc_probe.h"
 #include "encoder.h"
 #include "logic_analyze.h"
+#include "logic_save.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -141,6 +142,21 @@ void MX_FREERTOS_Init(void) {
       .stack_size = 1024,
     };
     if (osThreadNew(LOG_Analyze_TaskEntry, NULL, &logicAna_attributes) == NULL)
+    {
+      taskDISABLE_INTERRUPTS();
+      for (;;) { }
+    }
+  }
+
+  /* 存卡: 借记录表 → 写 CSV。只读表、无期限, 也放 TouchGFX 之下;
+   * 栈 2 KB (FatFs + SDMMC 轮询 + 行缓冲)。GUI 那边只调 LOG_Save_Request()。 */
+  {
+    static const osThreadAttr_t logicSave_attributes = {
+      .name       = "logicSave",
+      .priority   = osPriorityNormal,
+      .stack_size = 2048,
+    };
+    if (osThreadNew(LOG_Save_TaskEntry, NULL, &logicSave_attributes) == NULL)
     {
       taskDISABLE_INTERRUPTS();
       for (;;) { }

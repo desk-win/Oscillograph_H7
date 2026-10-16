@@ -54,7 +54,7 @@ static uint32_t s_rec_count;     /* 已写下的记录条数 */
 static uint32_t s_last_ts;       /* 最后一条记录的 ts */
 static uint32_t s_gap_pending;   /* 下一次写记录时要打 GAP */
 static uint32_t s_full;          /* 记录区满了 */
-static uint32_t s_recs_borrowed; /* 记录表被解码/存卡借走 */
+static uint32_t s_recs_borrowed; /* 记录表借用计数 (解码 + 存卡可以同时借) */
 static uint32_t s_clear_pending; /* 借用期间来的 Cancel, 还回去之后补发 */
 
 /* ---- 扫描任务的请求位: 中断/GUI 只置位, 扫描任务只清位 ---- */
@@ -843,9 +843,9 @@ int LOG_Trace_BorrowRecs(const log_rec_t **recs, uint32_t *count, uint32_t *last
 
     const uint32_t primask = __get_PRIMASK();
     __disable_irq();
-    const int ok = (s_recs_borrowed == 0u);
+    const int ok = (s_recs_borrowed < 0xFFu);
     if (ok != 0) {
-        s_recs_borrowed = 1u;
+        s_recs_borrowed++;
     }
     __set_PRIMASK(primask);
     return ok;
@@ -855,9 +855,14 @@ void LOG_Trace_ReleaseRecs(void)
 {
     const uint32_t primask = __get_PRIMASK();
     __disable_irq();
-    s_recs_borrowed = 0u;
-    const uint32_t pending = s_clear_pending;
-    s_clear_pending = 0u;
+    if (s_recs_borrowed != 0u) {
+        s_recs_borrowed--;
+    }
+    /* 最后一个借用者还回来之后, 才补做借用期间挂起的 Cancel */
+    const uint32_t pending = (s_recs_borrowed == 0u) ? s_clear_pending : 0u;
+    if (pending != 0u) {
+        s_clear_pending = 0u;
+    }
     __set_PRIMASK(primask);
 
     if (pending != 0u) {

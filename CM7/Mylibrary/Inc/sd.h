@@ -189,6 +189,15 @@ uint8_t SD_Delete(const char *name);
 void SD_MakeName(char *out, uint32_t index);
 
 /**
+ * 扫一遍根目录里已有的 "LOGnnnn.CSV", 返回**下一个可用序号** (最大编号 + 1)。
+ * 目录空 / 打不开 / 没有同形状的名字就返回 1; 编到 9999 之后也回到 1。
+ *
+ * 存卡任务在第一次挂卷之后调一次, 之后自己顺着推 —— 关机重开、或者换了张已经
+ * 有 LOG0007.CSV 的卡, 都不会覆盖掉旧文件。只在任务里调。
+ */
+uint32_t SD_NextIndex(void);
+
+/**
  * 返回值的短字符串 ("OK" / "MOUNT" / ...), 给界面上那行状态显示用。
  * 越界返回 "?"。
  */
@@ -205,9 +214,8 @@ extern volatile uint32_t sd_diag_gaps;
 /** 最近一次失败时 FatFs 给的原始 FRESULT (成功的那次不更新), 对照 ff.h 看 */
 extern volatile uint32_t sd_diag_fres;
 
-/* 这一对已经进了 CM7/CMakeLists.txt 的 target_sources。现在唯一的调用点是
- * CM7/Core/Src/main.c 里那段 SD 卡自检 (SD_TEST_ENABLE 那一块, 开机建 TEST.CSV
- * 并读回来对行数), 测得没问题以后把那段删掉, 接界面上的"存卡"就用这几个函数。 */
+/* 这几个入口已经进了 CM7/CMakeLists.txt 的 target_sources。调用点只有一个:
+ * CM7/Mylibrary/Src/logic_save.c 的存卡任务 (界面上的 Save 只发请求)。 */
 
 #ifdef __cplusplus
 }

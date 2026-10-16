@@ -110,7 +110,8 @@ struct TextBuf
 }
 
 Logic_DataView::Logic_DataView()
-    : cancelCallback(this, &Logic_DataView::cancelCallbackHandler)
+    : cancelCallback(this, &Logic_DataView::cancelCallbackHandler),
+      saveCallback(this, &Logic_DataView::saveCallbackHandler)
 {
 
 }
@@ -127,8 +128,9 @@ void Logic_DataView::setupScreen()
      * 不只是"接管", 是"换掉" —— 跳转那一句得在下面的 handler 里自己补回来。
      *
      * setupScreen() 每次进这个界面都会被调, setAction 是幂等的。
-     * save 不动, 它现在还是 base 里那条空跳转。 */
+     * save 同样顶掉: 它原来是 base 里那条空跳转 (什么都不做)。 */
     cancel.setAction(cancelCallback);
+    save.setAction(saveCallback);
 
     /* 把**进来之前就解好**的结果先摆上。
      *
@@ -399,6 +401,20 @@ void Logic_DataView::cancelCallbackHandler(const touchgfx::AbstractButton& src)
      * logicUpdated 是默认实现 (什么都不做)。所以清完屏幕上不会自己变 ——
      * Logic 控件是靠回去时 LogicView::setupScreen() 看见 ncols == 0 自己擦的。 */
     presenter->cancelLogicData();
+
+    application().gotoLogicScreenSlideTransitionEast();
+}
+
+void Logic_DataView::saveCallbackHandler(const touchgfx::AbstractButton& src)
+{
+    if (&src != &save)
+    {
+        return;
+    }
+
+    /* 只通知: 借记录表 + 写 CSV 在 logicSave 任务里做, 这一屏按下就跳回 Logic。
+     * 先发请求再跳 —— 表是任务那边借的, 这一屏在不在都无所谓。 */
+    presenter->saveLogicData();
 
     application().gotoLogicScreenSlideTransitionEast();
 }

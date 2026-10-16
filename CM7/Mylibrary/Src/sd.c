@@ -42,8 +42,8 @@
  *   下面那组静态量 (s_buf / s_buf_len / s_file_open / s_mounted) 也按"同一时刻只有
  *   一个任务在存卡"来用 —— 存卡是"点一下存一帧"的动作, 不是并发路径。
  *
- * 唯一的调用点是 CM7/Core/Src/main.c 里那段开机自检 (SD_TEST_ENABLE 那一块):
- * 它建一个 TEST.CSV, 拿合成的跳变表走一遍下面的正式路径, 再读回来对行数。
+ * 调用点是 CM7/Mylibrary/Src/logic_save.c 里的存卡任务: 借出跳变表 → 建文件 →
+ * 写 → 收尾。界面上的 Save 只发一个请求进来 (见 logic_save.h)。
  * ========================================================================= */
 
 #include "sd.h"
@@ -452,6 +452,62 @@ void SD_MakeName(char *out, uint32_t index)
      * 一次存卡只调一次, 不心疼。 */
     (void)snprintf(out, SD_NAME_MAX, "%s%04u.%s",
                    SD_NAME_PREFIX, (unsigned)(index % 10000u), SD_NAME_EXT);
+}
+
+/* 'a'..'z' → 'A'..'Z', 其余原样。只用来比文件名 (卡上别处建的名字可能是小写) */
+static char sd_up(char c)
+{
+    return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
+}
+
+uint32_t SD_NextIndex(void)
+{
+    DIR dir;
+    FILINFO fno;
+    uint32_t max = 0u;
+
+    if (f_opendir(&dir, SDPath) != FR_OK) {
+        return 1u;
+    }
+
+    for (;;) {
+        if (f_readdir(&dir, &fno) != FR_OK || fno.fname[0] == '\0') {
+            break;
+        }
+        if ((fno.fattrib & AM_DIR) != 0u) {
+            continue;                       /* 目录不算 */
+        }
+
+        /* 形状: "LOG" + 4 位数字 + '.' + "CSV" (_USE_LFN = 0, 只能是 8.3) */
+        uint32_t k;
+        for (k = 0u; k < 3u; k++) {
+            if (sd_up(fno.fname[k]) != SD_NAME_PREFIX[k]) { break; }
+        }
+        if (k != 3u) { continue; }
+
+        uint32_t idx = 0u;
+        for (k = 0u; k < 4u; k++) {
+            const char c = fno.fname[3u + k];
+            if (c < '0' || c > '9') { break; }
+            idx = idx * 10u + (uint32_t)(c - '0');
+        }
+        if (k != 4u) { continue; }
+
+        if (fno.fname[7] != '.') { continue; }
+        if (sd_up(fno.fname[8])  != SD_NAME_EXT[0]) { continue; }
+        if (sd_up(fno.fname[9])  != SD_NAME_EXT[1]) { continue; }
+        if (sd_up(fno.fname[10]) != SD_NAME_EXT[2]) { continue; }
+        if (fno.fname[11] != '\0') { continue; }
+
+        if (idx > max) {
+            max = idx;
+        }
+    }
+
+    (void)f_closedir(&dir);
+
+    /* 编到 9999 之后回到 1 重新找 (编号只有四位, 和 SD_MakeName 一个口径) */
+    return (max >= 9999u) ? 1u : (max + 1u);
 }
 
 const char *SD_StrErr(uint8_t res)

@@ -196,6 +196,14 @@ public:
      */
     void clearLogicData();
 
+    /**
+     * Save 按键: 请求把这一次采集的跳变表存到 SD 卡上。
+     *
+     * 只通知 (LOG_Save_Request) —— 借记录表、写 CSV 全在 logicSave 任务里做,
+     * GUI 帧里一个文件操作都没有。界面按下之后直接跳回 Logic 屏。
+     */
+    void saveLogicToSd();
+
     /** 逻辑采集是否在跑。View 用它决定进界面时把开关摆到哪一面。 */
     bool isLogicRunning() const;
 

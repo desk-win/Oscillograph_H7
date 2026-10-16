@@ -36,6 +36,13 @@ protected:
      */
     touchgfx::Callback<Logic_DataView, const touchgfx::AbstractButton&> cancelCallback;
     void cancelCallbackHandler(const touchgfx::AbstractButton& src);
+
+    /**
+     * Save 按键的回调 —— 和 cancel 同一个套路 (自己一份 Callback, 顶掉 base 里
+     * 那条空跳转, 跳转在 handler 里自己补)。
+     */
+    touchgfx::Callback<Logic_DataView, const touchgfx::AbstractButton&> saveCallback;
+    void saveCallbackHandler(const touchgfx::AbstractButton& src);
 };
 
 #endif // LOGIC_DATAVIEW_HPP
