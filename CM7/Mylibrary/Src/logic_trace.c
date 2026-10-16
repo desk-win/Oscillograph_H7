@@ -54,6 +54,8 @@ static uint32_t s_rec_count;     /* 已写下的记录条数 */
 static uint32_t s_last_ts;       /* 最后一条记录的 ts */
 static uint32_t s_gap_pending;   /* 下一次写记录时要打 GAP */
 static uint32_t s_full;          /* 记录区满了 */
+static uint32_t s_recs_borrowed; /* 记录表被解码/存卡借走 */
+static uint32_t s_clear_pending; /* 借用期间来的 Cancel, 还回去之后补发 */
 
 /* ---- 扫描任务的请求位: 中断/GUI 只置位, 扫描任务只清位 ---- */
 #define LOG_REQ_START  (1u << 0)
@@ -69,7 +71,7 @@ static void scan_do_clear(void);
 
 /* ---- 检测点: 每半帧扫描耗时 (DWT 周期, ÷480 是 µs)。只记数、不打印。
  * 关掉 LOG_SCAN_DIAG 即整块消失, 不影响被测对象。 ---- */
-#define LOG_SCAN_DIAG  1
+#define LOG_SCAN_DIAG  0
 #if LOG_SCAN_DIAG
 volatile uint32_t log_scan_diag_cyc;        /* 最近一次 */
 volatile uint32_t log_scan_diag_max_cyc;    /* 历史最大 */
@@ -633,6 +635,9 @@ void LOG_Trace_Start(void)
     if (s_running != 0u) {
         return;                 /* 已经在跑, 别把记录冲掉 */
     }
+    if (s_recs_borrowed != 0u) {
+        return;                 /* 记录表被借走 (解码/存卡), 这次 Start 作废: 开关会弹回 OFF */
+    }
 
     /* ---- 互斥: 示波器让路 (docs/log_plan.md §7.6) ----
      * 两个屏幕各自有个开关, 切屏不改变对方的状态, 所以不能指望"用户不会同时
@@ -660,6 +665,10 @@ void LOG_Trace_Start(void)
 /* 起采: 清记录状态 → 写记录 0 → 打开 CM4 的采集 */
 static void scan_do_start(void)
 {
+    if (s_recs_borrowed != 0u) {
+        return;                 /* 兜住"请求发出后才被借走"这一拍 */
+    }
+
     s_consumed       = 0u;      /* CM4 的 log_start 会把 frame_seq 清零 */
     s_rec_count      = 0u;
     s_last_ts        = 0u;
@@ -723,6 +732,11 @@ static void scan_do_stop(void)
     __DMB();
 
     s_running = 0u;
+
+    /* 一轮收工 (记录满 / 空闲超时 / 用户拨开关) 就加一代: tick 靠它归约出图,
+     * 解码靠它判"这一轮解过没有"。手动停也算一轮 —— 否则这一轮没有代数, 解码
+     * 那层会把它当成"还没采过"。 */
+    s_build_seq++;
 }
 
 void LOG_Trace_Stop(void)
@@ -755,6 +769,11 @@ void LOG_Trace_Clear(void)
 /* 丢掉这一轮的结果 (扫描任务内部) */
 static void scan_do_clear(void)
 {
+    if (s_recs_borrowed != 0u) {
+        s_clear_pending = 1u;   /* 记录表正在被读: 等 ReleaseRecs 之后补做 */
+        return;
+    }
+
     scan_do_stop();
 
     s_consumed    = 0u;
@@ -812,6 +831,38 @@ void LOG_Trace_NotifyFromISR(void)
 int LOG_Trace_IsRunning(void)
 {
     return s_running != 0u;
+}
+
+/* ---- 记录表借用: 解码/存卡读整片记录区期间, 采集不许重开, Cancel 也要等 ---- */
+
+int LOG_Trace_BorrowRecs(const log_rec_t **recs, uint32_t *count, uint32_t *last_rec_ts)
+{
+    if (LOG_Trace_GetRecs(recs, count, last_rec_ts) == 0u) {
+        return 0;                   /* 采集在跑 / 没数据 —— 等还是放弃由调用方定 */
+    }
+
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    const int ok = (s_recs_borrowed == 0u);
+    if (ok != 0) {
+        s_recs_borrowed = 1u;
+    }
+    __set_PRIMASK(primask);
+    return ok;
+}
+
+void LOG_Trace_ReleaseRecs(void)
+{
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    s_recs_borrowed = 0u;
+    const uint32_t pending = s_clear_pending;
+    s_clear_pending = 0u;
+    __set_PRIMASK(primask);
+
+    if (pending != 0u) {
+        osThreadFlagsSet(s_scan_task, LOG_REQ_CLEAR);
+    }
 }
 
 uint32_t LOG_Trace_GetViewMode(void)
@@ -913,8 +964,7 @@ void LOG_Trace_OnHalfFrame(void)
     const uint32_t now_ts = fs * LOG_SAMPLE_HALF_SAMPS;
 
     if (s_full != 0u || (now_ts - s_last_ts) > LOG_IDLE_TIMEOUT_SAMPS) {
-        scan_do_stop();
-        s_build_seq++;
+        scan_do_stop();     /* 收工: 代数在 scan_do_stop 里加 */
     }
 }
 

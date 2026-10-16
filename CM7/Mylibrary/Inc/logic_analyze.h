@@ -28,7 +28,7 @@ extern "C" {
  *
  * ── 什么时候能解 ──
  * 只有采集**停了**才能解: 采集期间记录表还在被半帧中断追加, 读出来是半截的。
- * 这一条在 LOG_Analyze_Run() 的入口挡着, 调用方不用自己判。
+ * 这一条在解码任务的入口挡着 (借不到记录表就不解), 调用方不用自己判。
  *
  * ── 配置从哪来 ──
  * LOG_Analyze_SetConfig() 是唯一的写入口, 只有 Logic_Setting 屏按下 Save 才走
@@ -151,7 +151,9 @@ typedef struct {
  * 512 是按菜屏上那块文字区定的: 白框 (0,91,800,389) + verdana 20 大约放得下
  * 16 行、每行 22 字节 ≈ 350 字节, 512 已经盖过屏幕能显示的量 —— 再大只是白占
  * 内存, 用户也看不到。 */
-#define LOG_ANA_MAX_ITEMS  512u
+/* 现在解码在独立任务里跑, 结果要双缓冲发布 (交换指针), 所以砍到 256:
+ * 两份 256 × 20 B = 10 KB。 */
+#define LOG_ANA_MAX_ITEMS  256u
 
 /* 一次解码需要的全部配置。union 里按协议各一份 —— I2C 那份是空的 (它没得可配),
  * 所以没有成员, 只有 proto 那个数。 */
@@ -185,7 +187,7 @@ void LOG_Analyze_GetConfig(log_ana_cfg_t *out);
 /**
  * 现在这一刻, 解码的前提够了没有。
  *
- * 判据和 LOG_Analyze_Run() 里那句一模一样: 采集停了 + 记录表冻结 + 真有跳变
+ * 判据和解码任务里那句一模一样: 采集停了 + 记录表冻结 + 真有跳变
  * 可解。**0 和"解出 0 条"是两件事** —— 这一条问的是"能不能解", Run 的返回值
  * 说的是"解出来几条", 记录表就绪但一条合法帧都没有的时候是"能解, 0 条"。
  *
@@ -196,36 +198,44 @@ void LOG_Analyze_GetConfig(log_ana_cfg_t *out);
 uint8_t LOG_Analyze_Ready(void);
 
 /**
- * 解一次码, 把结果整体覆盖掉, 返回解出几条。
+ * 请求解码某一代记录 (GUI 侧, 非阻塞)。
  *
- * 下面这几种情况一律解出 0 条 (结果被清空), 不会保留上一次的:
- *   - 采集还在跑 (记录表还在变, 见文件头)
- *   - 还没采过 (记录条数 <= 1, 也就是只有记录 0 那条起点电平)
- *   - 采样率拿不到 (fs_hz = 0 且标称值兜不住)
+ * 请求连着**配置快照**一起放进请求槽; 计数上限 1 的信号量 + 最新覆盖 = 旧的
+ * 请求不排队。同一代记录只解一次 (记号就是 LOG_Trace_GetResultSeq)。
  *
- * 现在从 Model::tick() 里同步调 (和 LOG_Trace_Poll 并排)。这一层刻意不假设
- * 自己在哪个上下文跑 —— 以后实测发现它太慢、要搬到独立 RTOS 任务里去的时候,
- * 改的只是"谁来调它", 这个函数本身不用动。
- *
- * 重入安全: 内部只写自己的静态区, 不碰 logic_trace.c 的状态。
+ * 解码期间记录表被"借用": 采集不会重开, Cancel 也挂到借用结束之后。
  */
-uint32_t LOG_Analyze_Run(void);
+void LOG_Analyze_Request(uint32_t result_gen);
+
+/** 结果代数: GUI 在 tick 里比它, 变了才去 GetItems() 取 (和 GetCols 一个套路)。 */
+uint32_t LOG_Analyze_GetPubSeq(void);
+
+/** 读发布缓冲期间置起 —— 解码任务换指针前会看它 (任务侧只等不咬)。 */
+void LOG_Analyze_PubLock(void);
+void LOG_Analyze_PubUnlock(void);
 
 /**
- * 取上一次 Run 的结果 (只读, 不用释放)。*count 收条数, 传 0 就不写。
+ * 解码任务入口: 由 CM7/Core/Src/freertos.c 里 osThreadNew 创建。
+ * 优先级放 TouchGFX 之下 (无期限的活); 栈 1 KB 够用 —— 解码器里最大的局部量
+ * 是 CAN 的 128 字节位数组 (CAN_BITS_MAX)。
+ */
+void LOG_Analyze_TaskEntry(void *argument);
+
+/**
+ * 取上一次解出来的结果 (只读, 不用释放)。*count 收条数, 传 0 就不写。
  *
- * 返回的指针指向这一层内部的静态区 —— **下一次 Run / Clear 会把它改掉**。
- * 现在解码和读都在 GUI 任务里, 天然不会打架; 以后解码搬到独立任务时, 这里
- * 要加一层"工作缓冲 → 发布缓冲"的拷贝 (注释会跟着改)。
+ * 返回的是**发布缓冲**的指针: 调用方要用 LOG_Analyze_PubLock/Unlock 包住
+ * "取指针 + 用完整段数据", 否则解码任务可能正好在换指针。
  */
 const log_ana_item_t *LOG_Analyze_GetItems(uint32_t *count);
 
-/** 丢掉解码结果, 回到"还没解过"。Logic_Data 屏的 Cancel 走这条路。 */
+/** 丢掉解码结果, 回到"还没解过" (在途的那一次解码也会被丢弃)。
+ *  Logic_Data 屏的 Cancel 走这条路。 */
 void LOG_Analyze_Clear(void);
 
 /* ---- 诊断 ---- */
 
-/** 最近一次 Run 解出几条 (和 LOG_Analyze_Run 的返回值同一个数) */
+/** 最近一次解码解出几条 */
 extern volatile uint32_t log_ana_diag_items;
 /** 最近一次 Run 花的 CPU 周期数 (DWT)。÷ 480 就是微秒 */
 extern volatile uint32_t log_ana_diag_cyc;
@@ -235,6 +245,11 @@ extern volatile uint32_t log_ana_diag_cyc;
 extern volatile uint32_t log_ana_diag_gap;
 /** 最近一次 Run 因为条目到顶而没存下来的帧数 (非 0 = 结果被截断了) */
 extern volatile uint32_t log_ana_diag_trunc;
+
+/** 检测点: 发布被占用/被 Cancel 丢弃的次数 */
+extern volatile uint32_t log_ana_diag_pub_drop;
+/** 检测点: 记录表借不到 (采集还在跑) 而重试的次数 */
+extern volatile uint32_t log_ana_diag_borrow_wait;
 
 #ifdef __cplusplus
 }

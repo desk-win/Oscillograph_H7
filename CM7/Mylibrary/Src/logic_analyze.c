@@ -18,11 +18,14 @@
  *
  * ── 这一层不碰什么 ──
  * 不碰 TouchGFX, 不碰任何外设寄存器, 不碰 logic_trace.c 的状态 —— 只读它交出来
- * 的记录表。所以以后要把它搬到独立 RTOS 任务里, 改的只是"谁调 LOG_Analyze_Run"。
+ * 的记录表 (借来的, 见 LOG_Trace_BorrowRecs)。解码本体现在跑在独立任务里
+ * (LOG_Analyze_TaskEntry, 在 freertos.c 里创建)。
  * ========================================================================= */
 
 #include "logic_analyze.h"
 #include "logic_trace.h"
+#include "main.h"                   /* __get_PRIMASK / __disable_irq (经 CMSIS 核头) */
+#include "cmsis_os2.h"
 #include <stdint.h>
 
 /* DWT 周期计数器 (0xE0001004), 和 osc_probe.h 里 OSC_PROBE_CYC 是同一个地址。
@@ -40,15 +43,34 @@ static const uint8_t s_ch_bit[8] = LOG_CH_BIT;
 
 /* ---- 配置与结果 ---- */
 
-static log_ana_cfg_t  s_cfg;
-static log_ana_item_t s_items[LOG_ANA_MAX_ITEMS];
-static uint32_t       s_count;
+static log_ana_cfg_t s_cfg;                 /* 已提交的配置 (Save 时写) */
+
+/* 发布缓冲: 任务往 s_work 里解, 完成后和 s_pub 换指针 —— 不拷贝数据。
+ * RAM: 2 × 256 × 20 B = 10 KB, 静态分配 (32 KB 堆放不下)。 */
+static log_ana_item_t  s_buf[2][LOG_ANA_MAX_ITEMS];
+static log_ana_item_t *s_pub  = s_buf[0];   /* GUI 读这一份 */
+static log_ana_item_t *s_work = s_buf[1];   /* 任务写这一份 */
+static uint32_t        s_count;             /* 已发布条数 */
+static volatile uint32_t s_pub_seq;         /* 单调: GUI 看到它变了就来取 */
+static volatile uint32_t s_pub_busy;        /* GUI 正在格式化发布缓冲 */
+
+/* ---- 请求槽 (GUI 写, 任务取走) ---- */
+#define ANA_PUB_WAIT_MS  100u               /* 等 GUI 让出发布缓冲的上限 */
+
+typedef struct { uint32_t gen; log_ana_cfg_t cfg; } ana_req_t;
+
+static osSemaphoreId_t s_req_sem;           /* 计数上限 1: 最新一次请求生效 */
+static ana_req_t       s_req;
+static uint32_t        s_last_gen;          /* 已经解过的那一代 (只任务写) */
+static volatile uint32_t s_cancel;
 
 /* ---- 诊断 ---- */
 volatile uint32_t log_ana_diag_items;
 volatile uint32_t log_ana_diag_cyc;
 volatile uint32_t log_ana_diag_gap;
 volatile uint32_t log_ana_diag_trunc;
+volatile uint32_t log_ana_diag_pub_drop;    /* 检测点: 发布被占用/Cancel 丢弃的次数 */
+volatile uint32_t log_ana_diag_borrow_wait; /* 检测点: 记录表借不到而重试的次数 */
 
 /* ===========================================================================
  * 跳变表查询
@@ -1007,6 +1029,15 @@ void LOG_Analyze_Init(void)
     s_cfg.u.spi.cs_active = 1u;     /* 1 = 高有效 (和 VAL_SPI_CS[0] = T_VALHIGH 对齐) */
 
     s_cfg.u.can.baud      = 125000u;
+
+    /* ---- 请求信号量 + 请求槽 ----
+     * 任务本体在 CM7/Core/Src/freertos.c 里创建, 这里只建它等的那个信号量。 */
+    s_req_sem  = osSemaphoreNew(1u, 0u, NULL);
+    s_req.gen  = 0u;
+    s_req.cfg  = s_cfg;
+    s_last_gen = 0u;
+    s_pub_busy = 0u;
+    s_cancel   = 0u;
 }
 
 void LOG_Analyze_SetConfig(const log_ana_cfg_t *cfg)
@@ -1033,59 +1064,80 @@ uint8_t LOG_Analyze_Ready(void)
     return LOG_Trace_GetRecs(0, 0, 0);
 }
 
-uint32_t LOG_Analyze_Run(void)
+/* ===========================================================================
+ * 解码本体 (只在解码任务里跑)
+ * ========================================================================= */
+
+static uint32_t analyze_run(const log_ana_cfg_t *cfg, const log_rec_t *recs,
+                            uint32_t nrec)
 {
     const uint32_t t0 = LOG_ANA_CYC;
+    uint32_t n_out   = 0u;
+    uint32_t n_gap   = 0u;
+    uint32_t n_trunc = 0u;
 
-    /* 先全部清掉: 这一轮解不出东西的话, 结果就该是空的 —— 留着上一次的会让
-     * 用户以为"这一轮也解出来了"。 */
-    s_count = 0u;
     log_ana_diag_items = 0u;
     log_ana_diag_gap   = 0u;
     log_ana_diag_trunc = 0u;
 
-    const log_rec_t *recs = 0;
-    uint32_t nrec = 0u;
+    /* UART 和 CAN 是**异步**的 (线上没有时钟线), 位宽得自己算; I2C 和 SPI 是
+     * **同步**的, 时钟线本身就在采集里, 用不上采样率。拿不到采样率就什么都不解
+     * (说明这一轮采集压根没跑起来, 结果本来就该是空的)。 */
+    const uint32_t fs_hz = decode_fs_hz();
 
-    /* GetRecs 把三个前提一起判了: 采集停了 + 记录表冻结 + 真的有跳变
-     * (只有记录 0 那条起点电平的话, 没有任何可解的东西)。 */
-    if (LOG_Trace_GetRecs(&recs, &nrec, 0) != 0u) {
-        uint32_t n_gap   = 0u;
-        uint32_t n_trunc = 0u;
-
-        /* UART 和 CAN 是**异步**的 (线上没有时钟线), 位宽得自己算 —— 只有这两路
-         * 要采样率, 所以在这儿取一次。fs_hz 拿不到 (CM4 这一轮还没发布过) 那两路
-         * 就什么都不解: 那说明这一轮采集压根没跑起来, 结果本来就该是空的。
-         *
-         * I2C 和 SPI 是**同步**的, 时钟线本身就在采集里, 用不上采样率。 */
-        const uint32_t fs_hz = decode_fs_hz();
-
-        if (s_cfg.proto == LOG_ANA_UART) {
-            if (fs_hz != 0u) {
-                s_count = uart_decode(recs, nrec, fs_hz, &s_cfg.u.uart,
-                                      s_items, LOG_ANA_MAX_ITEMS, &n_gap, &n_trunc);
-            }
-        } else if (s_cfg.proto == LOG_ANA_I2C) {
-            /* I2C 没有任何可配项 —— 上面那三种配置它一样都不需要。 */
-            s_count = i2c_decode(recs, nrec, s_items, LOG_ANA_MAX_ITEMS,
-                                 &n_gap, &n_trunc);
-        } else if (s_cfg.proto == LOG_ANA_SPI) {
-            s_count = spi_decode(recs, nrec, &s_cfg.u.spi, s_items,
-                                 LOG_ANA_MAX_ITEMS, &n_gap, &n_trunc);
-        } else if (s_cfg.proto == LOG_ANA_CAN) {
-            if (fs_hz != 0u) {
-                s_count = can_decode(recs, nrec, fs_hz, &s_cfg.u.can,
-                                     s_items, LOG_ANA_MAX_ITEMS, &n_gap, &n_trunc);
-            }
+    if (cfg->proto == LOG_ANA_UART) {
+        if (fs_hz != 0u) {
+            n_out = uart_decode(recs, nrec, fs_hz, &cfg->u.uart,
+                                s_work, LOG_ANA_MAX_ITEMS, &n_gap, &n_trunc);
         }
-
-        log_ana_diag_gap   = n_gap;
-        log_ana_diag_trunc = n_trunc;
+    } else if (cfg->proto == LOG_ANA_I2C) {
+        n_out = i2c_decode(recs, nrec, s_work, LOG_ANA_MAX_ITEMS, &n_gap, &n_trunc);
+    } else if (cfg->proto == LOG_ANA_SPI) {
+        n_out = spi_decode(recs, nrec, &cfg->u.spi, s_work,
+                           LOG_ANA_MAX_ITEMS, &n_gap, &n_trunc);
+    } else if (cfg->proto == LOG_ANA_CAN) {
+        if (fs_hz != 0u) {
+            n_out = can_decode(recs, nrec, fs_hz, &cfg->u.can, s_work,
+                               LOG_ANA_MAX_ITEMS, &n_gap, &n_trunc);
+        }
     }
 
-    log_ana_diag_items = s_count;
-    log_ana_diag_cyc   = LOG_ANA_CYC - t0;
-    return s_count;
+    log_ana_diag_gap   = n_gap;
+    log_ana_diag_trunc = n_trunc;
+    log_ana_diag_items = n_out;
+    log_ana_diag_cyc   = LOG_ANA_CYC - t0;      /* 检测点: ÷480 是 µs */
+    return n_out;
+}
+
+/* ===========================================================================
+ * 请求侧 (GUI 任务): 只写请求槽 + 放一次信号量
+ * ========================================================================= */
+
+void LOG_Analyze_Request(uint32_t result_gen)
+{
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    s_req.gen = result_gen;
+    s_req.cfg = s_cfg;              /* 配置快照: 任务不再读 GUI 那一份 */
+    s_cancel  = 0u;                 /* 新请求优先: 上一次的 Cancel 不再影响这一轮 */
+    __set_PRIMASK(primask);
+
+    (void)osSemaphoreRelease(s_req_sem);
+}
+
+uint32_t LOG_Analyze_GetPubSeq(void)
+{
+    return s_pub_seq;
+}
+
+void LOG_Analyze_PubLock(void)
+{
+    s_pub_busy = 1u;
+}
+
+void LOG_Analyze_PubUnlock(void)
+{
+    s_pub_busy = 0u;
 }
 
 const log_ana_item_t *LOG_Analyze_GetItems(uint32_t *count)
@@ -1093,10 +1145,83 @@ const log_ana_item_t *LOG_Analyze_GetItems(uint32_t *count)
     if (count != 0) {
         *count = s_count;
     }
-    return s_items;
+    return s_pub;
 }
 
 void LOG_Analyze_Clear(void)
 {
-    s_count = 0u;
+    s_count  = 0u;      /* 交出去就是 0 条 → View 擦掉 */
+    s_cancel = 1u;      /* 在途的那一次解码: 结果丢弃 */
+}
+
+/* ===========================================================================
+ * 解码任务 (由 CM7/Core/Src/freertos.c 创建)
+ *
+ * 顺序: 等请求 → 借记录表 (借不到就重试) → 等 GUI 让出发布缓冲 → 解码到 s_work
+ * → 临界区里换指针/加代数 → 还记录表。
+ * ========================================================================= */
+
+static void req_take(ana_req_t *out)
+{
+    const uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    *out = s_req;
+    __set_PRIMASK(primask);
+}
+
+void LOG_Analyze_TaskEntry(void *argument)
+{
+    (void)argument;
+
+    for (;;) {
+        if (osSemaphoreAcquire(s_req_sem, osWaitForever) != osOK) {
+            continue;
+        }
+
+        ana_req_t req;
+        req_take(&req);
+        if (req.gen == s_last_gen) {
+            continue;                   /* 这一代解过了 (同一轮采集只解一次) */
+        }
+
+        /* 记录表: 采集停了才借得到。还在跑就等下一拍; 没数据就丢掉这次请求 */
+        const log_rec_t *recs = 0;
+        uint32_t nrec = 0u;
+        if (LOG_Trace_BorrowRecs(&recs, &nrec, 0) == 0) {
+            if (LOG_Trace_IsRunning() != 0u) {
+                log_ana_diag_borrow_wait++;
+                osDelay(5);
+                (void)osSemaphoreRelease(s_req_sem);
+            }
+            continue;
+        }
+
+        /* GUI 正在格式化上一次的结果就等它 —— 它只占一小会儿 */
+        uint32_t waited = 0u;
+        while (s_pub_busy != 0u && waited < ANA_PUB_WAIT_MS) {
+            osDelay(1);
+            waited++;
+        }
+
+        const uint32_t k = analyze_run(&req.cfg, recs, nrec);
+
+        /* 换指针 + 计数 + 代数: 三步在临界区里一起完成 */
+        const uint32_t primask = __get_PRIMASK();
+        __disable_irq();
+        if (s_cancel != 0u) {
+            s_cancel = 0u;              /* Cancel: 本轮结果不要了 */
+        } else if (s_pub_busy != 0u) {
+            log_ana_diag_pub_drop++;    /* 等满 ANA_PUB_WAIT_MS 还没让开: 丢本次 */
+        } else {
+            log_ana_item_t *t = s_pub;
+            s_pub   = s_work;
+            s_work  = t;
+            s_count = k;
+            s_pub_seq++;
+            s_last_gen = req.gen;       /* 只有真发布出去了才算"这一代解过" */
+        }
+        __set_PRIMASK(primask);
+
+        LOG_Trace_ReleaseRecs();
+    }
 }

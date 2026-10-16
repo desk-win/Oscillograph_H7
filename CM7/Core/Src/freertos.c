@@ -32,6 +32,7 @@
 #include "uart_printf.h"
 #include "osc_probe.h"
 #include "encoder.h"
+#include "logic_analyze.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -130,6 +131,21 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   xTaskCreate(TouchGFX_Task, "TouchGfxTask", 4096, NULL, osPriorityAboveNormal1, NULL);
+
+  /* 逻辑分析仪协议解码: 只读冻结的记录表, 无期限 —— 放 TouchGFX 之下。
+   * 栈 1 KB (解码器里最大的局部量是 CAN 的 128 字节位数组)。 */
+  {
+    static const osThreadAttr_t logicAna_attributes = {
+      .name       = "logicAna",
+      .priority   = osPriorityNormal,
+      .stack_size = 1024,
+    };
+    if (osThreadNew(LOG_Analyze_TaskEntry, NULL, &logicAna_attributes) == NULL)
+    {
+      taskDISABLE_INTERRUPTS();
+      for (;;) { }
+    }
+  }
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */

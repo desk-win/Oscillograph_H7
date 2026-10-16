@@ -302,18 +302,11 @@ public:
      * ======================================================================= */
 
     /**
-     * Logic_Data 屏进来了: 请 Model 解一次码。
+     * Logic_Data 屏进来了: 请解码任务解一次码。
      *
-     * 只置一个记号, 真正解在下一个 tick 里做 —— 解码是几毫秒到几十毫秒的活,
-     * 不能让它堵在 setupScreen 里 (那是同步的, 会卡住切屏动画)。和"缩放只置
-     * 记号、归约留给 LOG_Trace_Poll"是同一个理由。
-     *
-     * 同一轮采集只会真解一次 (logicDecodedSeq 比 LOG_Trace_GetResultSeq),
-     * 反复进出这一屏不会反复重解。
-     *
-     * **请求会一直挂着, 直到采集停稳**: 点进来的时候开关还开着是常事, 那时候
-     * 记录表还在变, 解出来是半截数据 (LOG_Analyze_Ready 会这么说)。这种时候
-     * tick 不解也不丢请求, 每个 tick 再看一次, 等它停。
+     * 只发一个请求 (带配置快照) —— 解码是几毫秒到几十毫秒的活, 不能堵在
+     * setupScreen (同步的, 会卡住切屏) 里, 也不放在 tick 里 (那是 GUI 帧)。
+     * 同一代记录解过一次就不再解 (按 LOG_Trace_GetResultSeq 去重)。
      */
     void requestLogicDecode();
 
@@ -322,6 +315,8 @@ public:
      *
      * View::setupScreen 用它: 那一轮已经解过了的话, tick 不会再发回调 (记号没
      * 变), 屏幕上的内容就靠这一次取。
+     * (这一次取用没在 PubLock 里 —— 只有"新请求正好在这一帧解完"才会撞上,
+     *  概率极低; 要彻底关掉就把 View 那段格式化也包进去。)
      */
     const log_ana_item_t* getLogicItems(uint32_t* count) const;
 
@@ -387,17 +382,13 @@ protected:
 
     /* ---- 协议解码 ---- */
 
-    /* 有人请求过解码 (进 Logic_Data 屏), 等 tick 去消费。
-     *
-     * 它不是"下一拍就清掉"的那种记号: 采集还在跑的时候 tick 会把它留着, 每拍
-     * 再问一次, 直到真的解出一次为止 (见 Model.cpp 里那一段)。置它的是屏幕任务,
-     * 消费它的 (Model::tick) 也是同一个任务 —— 不用 volatile, 和编码器那条路
-     * 是同一个道理。 */
-    bool logicDecodeReq;
+    /* 已经消费到第几个解码结果 (LOG_Analyze_GetPubSeq 的那个数)。0 = 还没有
+     * 结果。由 tick 写、View::setupScreen 读, 都在屏幕任务里, 不用 volatile。 */
+    uint32_t logicPubSeq;
 
-    /* 已经解到第几代采集 (LOG_Trace_GetResultSeq 的那个数)。同一轮只解一次:
-     * 反复进出 Logic_Data 屏不该把同一批记录重解好几遍。0 = 还没解过。 */
-    uint32_t logicDecodedSeq;
+    /* 有人请求过解码 (进 Logic_Data 屏), 还没真的发出去。
+     * 采集还在跑 (代数为 0, 也就是这一轮还没收工) 时挂着, tick 里等它收工再发。 */
+    bool logicDecodeReq;
 };
 
 #endif // MODEL_HPP

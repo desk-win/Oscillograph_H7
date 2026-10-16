@@ -33,7 +33,7 @@
 Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
                  committedProtoMode(LOG_PROTO_UART), draftProtoMode(LOG_PROTO_UART),
                  oscSelected(OSC_TRACE_CH1),
-                 logicDecodeReq(false), logicDecodedSeq(0u)
+                 logicPubSeq(0u), logicDecodeReq(false)
 {
     OSC_Probe_Init();
 
@@ -58,7 +58,7 @@ Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
     }
 
     /* 解码层的默认配置 (UART + 设置屏候选值里第一个)。必须赶在任何人调
-     * LOG_Analyze_Run() 之前跑过 —— 那要等到用户点进 Logic_Data 屏了, 所以
+     * LOG_Analyze_Request() 之前跑过 —— 那要等到用户点进 Logic_Data 屏了, 所以
      * 这儿是最早也最合适的位置。它不碰任何硬件, 在 main() 之前跑是安全的。 */
     LOG_Analyze_Init();
 
@@ -195,8 +195,8 @@ void Model::commitLogicConfig(const log_ana_cfg_t& cfg)
 
 void Model::requestLogicDecode()
 {
-    /* 只置记号。解码在 Model::tick 里做 —— 那是几毫秒到几十毫秒的活, 塞在
-     * setupScreen 里会把切屏动画堵住 (切换是同步做完的)。 */
+    /* 只置记号, 真正发请求在 tick 里 (见下面那一段) —— 采集还开着的时候代数
+     * 还是 0, 那时候发出去会被当成"还没采过"丢掉。 */
     logicDecodeReq = true;
 }
 
@@ -211,10 +211,8 @@ void Model::clearLogicData()
     LOG_Trace_Clear();
 
     /* 解码结果一起丢 —— 它和记录是同一轮采集的产物, 记录没了它就没有意义。
-     *
-     * 不丢的话会留下一个很别扭的状态: logicDecodedSeq 还等于这一代的记号, 于是
-     * 下次进 Logic_Data 屏不会重新解 (记号没变), 屏幕上却把上一轮解出来的字节
-     * 又摆了一遍 —— 而那些字节对应的波形已经被 Cancel 掉了。 */
+     * LOG_Analyze_Clear() 把发布条数清 0 (在途的那次解码也会被丢弃), 所以下次
+     * 进 Logic_Data 屏 setupScreen 取到的是 0 条, 不会把上一轮的字节再摆一遍。 */
     LOG_Analyze_Clear();
 
     /* Model 自己这两片也要清 —— 它们才是 View 直接读的那一份。不清的话,
@@ -513,49 +511,43 @@ void Model::tick()
         }
     }
 
-    /* ---- 协议解码 ----
+    /* ---- 请求解码 (等这一轮收工) ----
      *
-     * 排在 LOG_Trace_Poll() 后面: Poll 可能刚刚归约完 (采集是在中断里停的, 停完
-     * 要等这一拍才收尾), 而解码要的前提是"采集已经停了"。那个前提
-     * LOG_Trace_GetRecs 自己会判, 所以顺序上不欠什么, 排在后面只是读起来顺。
-     *
-     * **必须在下面那个"两路都停了就提前返回"的守卫之前**: 用户点进 Logic_Data
-     * 屏看数据的时候, 采集恰恰是停着的 —— 排在守卫后面的话这一帧永远走不到这儿,
-     * 屏幕上一直是空的。(和上面 LOG_Trace_Poll 同一个理由, 那一段注释也说了。)
-     *
-     * 开销: 没请求过解码时就是一个 bool 判断, 每个 tick 都跑得起。 */
+     * 进 Logic_Data 屏时采集很可能还开着, 那时候代数是 0 —— 先记着, 等这一轮
+     * 收工 (记录满 / 空闲超时 / 手动停) 拿到代数再发给解码任务。 */
     if (logicDecodeReq)
     {
-        /* 记号比的是 LOG_Trace_GetResultSeq(): 每扫完一个半帧加一, 所以"采集停着
-         * 不动"就等于"这个数不动" —— 同一轮采集是这个数, 新一轮采集就是另一个数。
-         *
-         * seq == 0 是"这一次上电还没扫完过半帧" (没采过)。
-         *
-         * 这一支要**先清请求**: 这两种情况都没有可等的东西 —— 还没采过的话, 用户
-         * 想采就得先退出去开那个开关, 回来时会重新请求一次; 已经解过的这一代,
-         * 屏幕上该显示什么 View::setupScreen 自己取 (Model::getLogicItems)。 */
-        const uint32_t seq = LOG_Trace_GetResultSeq();
-
-        if (seq == 0u || seq == logicDecodedSeq)
+        const uint32_t gen = LOG_Trace_GetResultSeq();
+        if (gen != 0u)
         {
             logicDecodeReq = false;
+            LOG_Analyze_Request(gen);
         }
-        else if (LOG_Analyze_Ready() != 0u)
-        {
-            const uint32_t cnt = LOG_Analyze_Run();
-            logicDecodedSeq = seq;
-            logicDecodeReq = false;
+    }
 
-            /* 先记标记再通知: 万一回调里又请求了一次解码 (现在没有这种屏, 但
-             * 以后要是加了"解码完自动再解一遍"之类的), 也不会重解同一代。 */
-            if (modelListener != 0)
+    /* ---- 协议解码结果 ----
+     *
+     * 解码在独立任务里做 (freertos.c 里创建): 这里只比结果代数, 变了才取 ——
+     * 和上面 LOG_Trace_GetCols 的取走式是同一个套路。取的时候用 PubLock 包住
+     * 整段通知 (View 是同步格式化进控件的), 免得任务正好在换发布指针。
+     *
+     * **必须在下面那个"两路都停了就提前返回"的守卫之前**: 用户点进 Logic_Data
+     * 屏时采集在不在跑都无所谓, 结果一到就得通知 View。 */
+    {
+        const uint32_t ps = LOG_Analyze_GetPubSeq();
+        if (ps != logicPubSeq)
+        {
+            logicPubSeq = ps;
+
+            uint32_t cnt = 0u;
+            LOG_Analyze_PubLock();
+            const log_ana_item_t* items = LOG_Analyze_GetItems(&cnt);
+            if (modelListener != 0 && items != 0)
             {
-                modelListener->logicDataUpdated(LOG_Analyze_GetItems(0), cnt);
+                modelListener->logicDataUpdated(items, cnt);
             }
+            LOG_Analyze_PubUnlock();
         }
-        /* 剩下的只有一种: 有新的一代, 但采集还在跑 (记录表还在变, 解出来是半截
-         * 数据)。请求**挂着不解**, 下一个 tick 再问一次 —— 用户点进数据屏的时候
-         * 开关很可能还开着, 就是要等它停稳。 */
     }
 
     /* 两个通道都停了才没什么可做。只要还有一路在跑, 下面就得照常走 ——

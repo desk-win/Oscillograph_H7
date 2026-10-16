@@ -240,7 +240,17 @@ uint8_t LOG_Trace_GetRecs(const log_rec_t **recs, uint32_t *count,
                           uint32_t *last_rec_ts);
 
 /**
- * 采集结果的代数: 每完成一轮采集 (记录满 / 空闲超时) 加一, 开机是 0。
+ * 借用冻结的记录表 (任务上下文): 借用期间采集不许重开, Cancel 挂起到释放之后。
+ * 解码/存卡这类"要读整片记录区"的活必须先借到它。
+ *
+ * 返回 0 = 借不到 (采集还在跑 / 已被借用 / 没有可解的数据)。
+ * 借到之后必须配一次 LOG_Trace_ReleaseRecs()。
+ */
+int  LOG_Trace_BorrowRecs(const log_rec_t **recs, uint32_t *count, uint32_t *last_rec_ts);
+void LOG_Trace_ReleaseRecs(void);
+
+/**
+ * 采集结果的代数: 每收工一轮 (记录满 / 空闲超时 / 用户拨开关停) 加一, 开机是 0。
  *
  * 和 s_build_seq 是同一个数 —— 那个记号本来就在"采集收工"时自增 (tick 拿它
  * 判该不该归约), 这里只是把它交出来。只增不减, Start / Clear 都不清它。
