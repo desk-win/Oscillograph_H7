@@ -34,6 +34,7 @@
 #include "encoder.h"
 #include "logic_analyze.h"
 #include "logic_save.h"
+#include "qspi_flash.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -180,21 +181,42 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
-  // uint32_t lastPrint = 0;
-  // uint8_t  firstPrint = 1;
+  uint32_t jedec_id = 0U;
+  HAL_StatusTypeDef qspi_flash_status;
+
+  (void)argument;
+
+  uart1_printf("[QSPI] probe start\r\n");
+
+  qspi_flash_status = QSPI_FLASH_ReadJedecId(&jedec_id);
+  if (qspi_flash_status == HAL_OK)
+  {
+    uint8_t manufacturer_id = (uint8_t)(jedec_id >> 16);
+    uint8_t memory_type = (uint8_t)(jedec_id >> 8);
+    uint8_t capacity_code = (uint8_t)jedec_id;
+
+    uart1_printf("[QSPI] JEDEC ID: 0x%06lX\r\n", (unsigned long)jedec_id);
+    uart1_printf("[QSPI] Manufacturer: 0x%02X, memory type: 0x%02X, capacity: 0x%02X\r\n",
+                 (unsigned int)manufacturer_id,
+                 (unsigned int)memory_type,
+                 (unsigned int)capacity_code);
+    uart1_printf("[QSPI] Capacity: 32 MB, expected W25Q256\r\n");
+
+    if (jedec_id == 0x00EF4019U)
+    {
+      qspi_flash_status = QSPI_FLASH_Init();
+      uart1_printf("[QSPI] full init: %s\r\n",
+                   (qspi_flash_status == HAL_OK) ? "OK" : "FAILED");
+    }
+  }
+  else
+  {
+    uart1_printf("[QSPI] read JEDEC ID failed: %d\r\n", (int)qspi_flash_status);
+  }
 
   for(;;)
   {
-   
-    osDelay(5);
-
-    // const uint32_t now = OSC_PROBE_CYC;
-    // if (firstPrint || ((uint32_t)(now - lastPrint) >= SystemCoreClock))
-    // {
-    //   firstPrint = 0;
-    //   lastPrint  = now;
-    //   OSC_Probe_Report();
-    // }
+    osDelay(1000);
   }
   /* USER CODE END StartDefaultTask */
 }

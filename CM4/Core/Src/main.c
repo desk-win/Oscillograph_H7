@@ -167,7 +167,7 @@ int main(void)
     if (LOG_CTRL->cfg_run == 0u && (HAL_GetTick() - s_diag_tick) >= 1000u)
     {
       s_diag_tick = HAL_GetTick();
-      // OSC_CH_DiagPrint();
+      OSC_CH_DiagPrint();
     }
   }
   /* USER CODE END 3 */

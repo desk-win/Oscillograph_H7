@@ -182,6 +182,7 @@ Error_Handler();
   MX_QUADSPI_Init();
   MX_SDMMC1_SD_Init();
   MX_FATFS_Init();
+  MX_I2C4_Init();
   MX_TouchGFX_Init();
   /* Call PreOsInit function */
   MX_TouchGFX_PreOSInit();

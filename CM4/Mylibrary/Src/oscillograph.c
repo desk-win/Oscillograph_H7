@@ -30,6 +30,8 @@ volatile osc_ctrl_t osc_ctrl __attribute__((section(".osc_ctrl"), aligned(32)));
  * ========================================================================= */
 static volatile uint32_t s_completed_ch1;   /* HT/TC 中断里 ++ */
 static volatile uint32_t s_completed_ch2;
+static volatile uint32_t s_ch1_tc_last_cyc;
+static volatile uint32_t s_ch1_tc_period_cyc;
 static uint32_t s_processed_ch1;            /* 主循环已经处理到第几次完成 */
 static uint32_t s_processed_ch2;
 
@@ -46,6 +48,7 @@ static void dwt_init(void){
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
     DWT->CYCCNT = 0;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    s_ch1_tc_last_cyc = DWT->CYCCNT;
 }
 
 /**
@@ -139,6 +142,7 @@ void OSC_CH_StopAdc(void)
 
     HAL_ADCEx_MultiModeStop_DMA(&hadc1);   /* 主 + 从一起停 */
     HAL_ADC_Stop_DMA(&hadc3);
+    s_ch1_tc_period_cyc = 0u;
     s_adc_running = 0u;
 }
 
@@ -149,6 +153,8 @@ void OSC_CH_StartAdc(void)
     HAL_ADCEx_MultiModeStart_DMA(&hadc1, osc_ch1_buf, OSC_CH1_BUF_WORDS);
     HAL_ADC_Start_DMA(&hadc3, (uint32_t *)osc_ch2_buf, OSC_CH2_BUF_WORDS);
 
+    s_ch1_tc_last_cyc   = DWT->CYCCNT;
+    s_ch1_tc_period_cyc = 0u;
     __HAL_ADC_CLEAR_FLAG(&hadc1, ADC_FLAG_OVR);
     __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
     s_adc_running = 1u;
@@ -164,13 +170,14 @@ void OSC_CH_StartAdc(void)
 static uint32_t s_cyc_ch1, s_last_ch1, s_acc_ch1;
 static uint32_t s_cyc_ch2, s_last_ch2, s_acc_ch2;
 
-/* 每行只留四个数, 一行打完, 其余全部砍掉。
+/* 每行只留五个数, 一行打完, 其余全部砍掉。
  *
  * 为什么砍: 打印是阻塞的, 每打一次必然丢一个半帧 —— 它自己在制造环上的空洞,
  * 也就是我们正在查的那个东西。原来 7 行 (两百多字符) 在 115200 下要 20 ms,
  * 那期间 DMA 绕回来一整圈。行数越少, 仪器本身对被测对象的扰动越小。
  *
- * 留下的四个:
+ * 留下的五个:
+ *   rate1 ADC1 DMA 全满中断的 DWT 周期差换算出的采样率
  *   seq1  换算 miss 的速率要用 (miss 的绝对值和增速是两回事)
  *   miss  扫描来不及的次数 —— 这是"环上有没有洞"的直接来源
  *   pos1 / flags
@@ -179,8 +186,7 @@ static uint32_t s_cyc_ch2, s_last_ch2, s_acc_ch2;
  *
  * 砍掉的:
  *   addr/magic     链接脚本钉死后是常数, 只在开机那一次值得看
- *   rate1/rate2    公式原来错了 16 倍 (已修, 见 rate_update), 而且可由
- *                  seq1 的斜率算出来, 不必单占一行
+ *   rate2          ADC3 的速率暂时不占一行
  *   ovr1/ovr2      ADC 溢出。到目前为止恒为 0 —— 真出现时再加回来,
  *                  它和 miss 是两种不同的失效 (一个是没排上队, 一个是
  *                  DMA 没搬完就又被触发)
@@ -190,7 +196,12 @@ static uint32_t s_cyc_ch2, s_last_ch2, s_acc_ch2;
  * 位置没变: 仍在主循环里每秒一次。 */
 void OSC_CH_DiagPrint(void)
 {
-    usb_printf("[OSC] seq1=%lu miss=%lu pos1=%lu flags=0x%lX\r\n",
+    const uint32_t period_cyc = s_ch1_tc_period_cyc;
+    const uint32_t rate_sa = (period_cyc == 0u) ? 0u :
+        (uint32_t)(((uint64_t)OSC_CH1_BUF_WORDS * 2u * SystemCoreClock) / period_cyc);
+
+    usb_printf("[OSC] rate1=%lu seq1=%lu miss=%lu pos1=%lu flags=0x%lX\r\n",
+               (unsigned long)rate_sa,
                (unsigned long)osc_ctrl.seq_ch1,
                (unsigned long)osc_ctrl.diag_miss,
                (unsigned long)osc_ctrl.trig_pos_ch1,
@@ -659,6 +670,8 @@ void OSC_CH_Poll(void)
     }
 }
 
+
+
 /* 中断里只记数, 扫描交给 OSC_CH_Poll —— 见文件开头那段说明 */
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
 {
@@ -668,8 +681,14 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
-    if (hadc->Instance == ADC1)      s_completed_ch1++;   /* 后半帧 [2048,4096) 完成 */
-    else if (hadc->Instance == ADC3) s_completed_ch2++;
+    if (hadc->Instance == ADC1) {
+        const uint32_t now = DWT->CYCCNT;
+        s_ch1_tc_period_cyc = now - s_ch1_tc_last_cyc;
+        s_ch1_tc_last_cyc = now;
+        s_completed_ch1++;                                /* 后半帧 [2048,4096) 完成 */
+    } else if (hadc->Instance == ADC3) {
+        s_completed_ch2++;
+    }
 }
 
 void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
