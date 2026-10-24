@@ -9,3 +9,10 @@ CompileFlags:
   CompilationDatabase: CM7/build
 If:
   PathMatch: CM7/.*
+
+---
+
+CompileFlags:
+  CompilationDatabase: BootLoader/CM7/build
+If:
+  PathMatch: BootLoader/.*
