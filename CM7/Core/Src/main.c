@@ -102,6 +102,8 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
 
+  SCB->VTOR = 0x08020000U;
+
   /* USER CODE END 1 */
 /* USER CODE BEGIN Boot_Mode_Sequence_0 */
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)

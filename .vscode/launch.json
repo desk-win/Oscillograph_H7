@@ -7,7 +7,7 @@
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "preBuild": "${command:st-stm32-ide-debug-launch.build}",
-            "preLaunchTask": "CubeProgrammer: Flash",
+            "preLaunchTask": "Flash Oscillograph_H7",
             "runEntry": "main",
             "deviceName": "STM32H747XI",
             "deviceCore": "Cortex-M7",

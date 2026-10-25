@@ -8,7 +8,6 @@
             "args": [
                 "-C", "${workspaceFolder}\\CM7\\build"
             ],
-            "group": "build",
             "problemMatcher": ["$gcc"],
             "presentation": {
                 "reveal": "silent",
@@ -23,7 +22,6 @@
             "args": [
                 "-C", "${workspaceFolder}\\CM4\\build"
             ],
-            "group": "build",
             "problemMatcher": ["$gcc"],
             "presentation": {
                 "reveal": "silent",
@@ -32,7 +30,43 @@
             }
         },
         {
-            "label": "CubeProgrammer: Flash",
+            "label": "Build BootLoader",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build", "${workspaceFolder}\\BootLoader\\build\\Debug",
+                "--parallel", "4"
+            ],
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared",
+                "showReuseMessage": false
+            }
+        },
+        {
+            "label": "Flash BootLoader",
+            "type": "shell",
+            "command": "C:\\Users\\chair\\AppData\\Local\\stm32cube\\bundles\\programmer\\2.22.0+st.1\\bin\\STM32_Programmer_CLI.exe",
+            "args": [
+                "-c", "port=SWD",
+                "-w", "${workspaceFolder}\\BootLoader\\CM7\\build\\BootLoader_CM7.elf",
+                "-rst"
+            ],
+            "group": {
+                "kind": "build"
+            },
+            "dependsOn": ["Build BootLoader"],
+            "dependsOrder": "sequence",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Flash Oscillograph_H7",
             "type": "shell",
             "command": "C:\\Users\\chair\\AppData\\Local\\stm32cube\\bundles\\programmer\\2.22.0+st.1\\bin\\STM32_Programmer_CLI.exe",
             "args": [
@@ -42,8 +76,7 @@
                 "-rst"
             ],
             "group": {
-                "kind": "build",
-                "isDefault": true
+                "kind": "build"
             },
             "dependsOn": ["Build CM7", "Build CM4"],
             "dependsOrder": "sequence",

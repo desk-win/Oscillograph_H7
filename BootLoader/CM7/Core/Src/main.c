@@ -37,6 +37,11 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define APP_BASE_ADDRESS  0x08020000U
+#define APP_END_ADDRESS   0x08160000U
+#define APP_SRAM_START    0x20000000U
+#define APP_SRAM_END      0x20020000U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -55,10 +60,56 @@ void SystemClock_Config(void);
 static void MPU_Config(void);
 /* USER CODE BEGIN PFP */
 
+static void BootLoader_JumpToApplication(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+typedef void (*app_entry_t)(void);
+
+static void BootLoader_JumpToApplication(void)
+{
+  uint32_t app_stack = *(volatile uint32_t *)APP_BASE_ADDRESS;
+  uint32_t app_reset = *(volatile uint32_t *)(APP_BASE_ADDRESS + 4U);
+
+  if ((app_stack < APP_SRAM_START) ||
+      (app_stack > APP_SRAM_END) ||
+      ((app_stack & 0x7U) != 0U) ||
+      (app_reset < APP_BASE_ADDRESS) ||
+      (app_reset >= APP_END_ADDRESS) ||
+      ((app_reset & 0x1U) == 0U))
+  {
+    while (1)
+    {
+    }
+  }
+
+  __disable_irq();
+
+  HAL_QSPI_DeInit(&hqspi);
+  HAL_I2C_DeInit(&hi2c4);
+  HAL_UART_DeInit(&huart1);
+
+  SysTick->CTRL = 0U;
+  SysTick->LOAD = 0U;
+  SysTick->VAL = 0U;
+
+  for (uint32_t i = 0U; i < 8U; i++)
+  {
+    NVIC->ICER[i] = 0xFFFFFFFFU;
+    NVIC->ICPR[i] = 0xFFFFFFFFU;
+  }
+
+  SCB->VTOR = APP_BASE_ADDRESS;
+  __DSB();
+  __ISB();
+
+  __set_MSP(app_stack);
+  __enable_irq();
+  ((app_entry_t)app_reset)();
+}
 
 /* USER CODE END 0 */
 
@@ -98,6 +149,8 @@ int main(void)
   MX_QUADSPI_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  BootLoader_JumpToApplication();
 
   /* USER CODE END 2 */
 
