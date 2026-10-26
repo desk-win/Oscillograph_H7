@@ -23,9 +23,13 @@
 #include "quadspi.h"
 #include "usart.h"
 #include "gpio.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
+#include "bl24c16f.h"
 
 /* USER CODE END Includes */
 
@@ -60,6 +64,7 @@ void SystemClock_Config(void);
 static void MPU_Config(void);
 /* USER CODE BEGIN PFP */
 
+static void BootLoader_Printf(const char *format, ...);
 static void BootLoader_JumpToApplication(void);
 
 /* USER CODE END PFP */
@@ -68,6 +73,26 @@ static void BootLoader_JumpToApplication(void);
 /* USER CODE BEGIN 0 */
 
 typedef void (*app_entry_t)(void);
+
+static void BootLoader_Printf(const char *format, ...)
+{
+  char buffer[128];
+  va_list args;
+  int length;
+
+  va_start(args, format);
+  length = vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+
+  if (length > 0)
+  {
+    uint16_t send_length = (length < (int)sizeof(buffer))
+                         ? (uint16_t)length
+                         : (uint16_t)(sizeof(buffer) - 1U);
+
+    (void)HAL_UART_Transmit(&huart1, (uint8_t *)buffer, send_length, 200U);
+  }
+}
 
 static void BootLoader_JumpToApplication(void)
 {
@@ -149,6 +174,50 @@ int main(void)
   MX_QUADSPI_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  {
+    HAL_StatusTypeDef eeprom_status;
+    BL24C16F_TestResult test_result;
+    uint32_t expected_crc = 0U;
+    uint32_t read_crc = 0U;
+
+    BootLoader_Printf("[BL] EEPROM test start\r\n");
+
+    eeprom_status = BL24C16F_Init();
+    if (eeprom_status == HAL_OK)
+    {
+      BootLoader_Printf("[EEPROM] found at 0x%02X\r\n",
+                        (unsigned int)BL24C16F_GetAddress());
+
+      test_result = BL24C16F_RunTest(&expected_crc, &read_crc);
+      if (test_result == BL24C16F_TEST_WRITE_FAILED)
+      {
+        BootLoader_Printf("[EEPROM] write FAILED\r\n");
+      }
+      else
+      {
+        BootLoader_Printf("[EEPROM] write OK\r\n");
+
+        if (test_result == BL24C16F_TEST_READ_FAILED)
+        {
+          BootLoader_Printf("[EEPROM] read FAILED\r\n");
+        }
+        else
+        {
+          BootLoader_Printf("[EEPROM] read OK\r\n");
+          BootLoader_Printf("[EEPROM] CRC expected=0x%08lX read=0x%08lX\r\n",
+                            (unsigned long)expected_crc,
+                            (unsigned long)read_crc);
+          BootLoader_Printf("[EEPROM] CRC %s\r\n",
+                            (test_result == BL24C16F_TEST_OK) ? "OK" : "FAILED");
+        }
+      }
+    }
+    else
+    {
+      BootLoader_Printf("[EEPROM] not found on I2C4\r\n");
+    }
+  }
 
   BootLoader_JumpToApplication();
 
