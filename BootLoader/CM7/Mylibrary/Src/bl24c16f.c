@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "crc32.h"
 #include "i2c.h"
 
 #define BL24C16F_FIRST_ADDRESS 0x50U
@@ -26,23 +27,6 @@ _Static_assert(sizeof(BL24C16F_TestRecord) == BL24C16F_PAGE_SIZE,
                "EEPROM test record must fit one page");
 
 static uint8_t s_device_address;
-
-static uint32_t BL24C16F_Crc32(const uint8_t *data, uint32_t size)
-{
-    uint32_t crc = 0xFFFFFFFFU;
-
-    for (uint32_t i = 0U; i < size; i++)
-    {
-        crc ^= data[i];
-        for (uint32_t bit = 0U; bit < 8U; bit++)
-        {
-            crc = ((crc & 1U) != 0U) ? ((crc >> 1U) ^ 0xEDB88320U)
-                                     : (crc >> 1U);
-        }
-    }
-
-    return ~crc;
-}
 
 HAL_StatusTypeDef BL24C16F_Init(void)
 {
@@ -138,8 +122,8 @@ BL24C16F_TestResult BL24C16F_RunTest(uint32_t *expected_crc,
     record.magic = BL24C16F_TEST_MAGIC;
     record.sequence = BL24C16F_TEST_SEQUENCE;
     record.value = BL24C16F_TEST_VALUE;
-    record.crc = BL24C16F_Crc32((const uint8_t *)&record,
-                                offsetof(BL24C16F_TestRecord, crc));
+    record.crc = CRC32_Calculate((const uint8_t *)&record,
+                                 offsetof(BL24C16F_TestRecord, crc));
 
     if (expected_crc != NULL)
     {
@@ -171,8 +155,8 @@ BL24C16F_TestResult BL24C16F_RunTest(uint32_t *expected_crc,
 
     if ((memcmp(&record, &readback, offsetof(BL24C16F_TestRecord, crc)) != 0) ||
         (readback.crc != record.crc) ||
-        (BL24C16F_Crc32((const uint8_t *)&readback,
-                        offsetof(BL24C16F_TestRecord, crc)) != readback.crc))
+        (CRC32_Calculate((const uint8_t *)&readback,
+                         offsetof(BL24C16F_TestRecord, crc)) != readback.crc))
     {
         return BL24C16F_TEST_CRC_FAILED;
     }

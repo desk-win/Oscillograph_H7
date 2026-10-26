@@ -81,6 +81,24 @@ LoopCopyDataInit:
   adds r4, r0, r3
   cmp r4, r1
   bcc CopyDataInit
+
+/* Copy RAM-resident flash routines from flash to ITCM RAM. */
+  ldr r0, =_sramfunc
+  ldr r1, =_eramfunc
+  ldr r2, =_siramfunc
+  movs r3, #0
+  b LoopCopyRamFuncInit
+
+CopyRamFuncInit:
+  ldr r4, [r2, r3]
+  str r4, [r0, r3]
+  adds r3, r3, #4
+
+LoopCopyRamFuncInit:
+  adds r4, r0, r3
+  cmp r4, r1
+  bcc CopyRamFuncInit
+
 /* Zero fill the bss segment. */
   ldr r2, =_sbss
   ldr r4, =_ebss

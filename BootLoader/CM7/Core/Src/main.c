@@ -30,6 +30,8 @@
 /* USER CODE BEGIN Includes */
 
 #include "bl24c16f.h"
+#include "crc32.h"
+#include "qspi_flash.h"
 
 /* USER CODE END Includes */
 
@@ -174,6 +176,35 @@ int main(void)
   MX_QUADSPI_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  BootLoader_Printf("[BL] CRC32 self-test: %s\r\n",
+                    (CRC32_SelfTest() == HAL_OK) ? "OK" : "FAILED");
+
+  {
+    HAL_StatusTypeDef qspi_status = QSPI_FLASH_Init();
+
+    if (qspi_status == HAL_OK)
+    {
+      uint32_t jedec_id = 0U;
+      uint32_t sample_crc = 0U;
+
+      if ((QSPI_FLASH_ReadJedecId(&jedec_id) == HAL_OK) &&
+          (QSPI_FLASH_CalculateCrc32(0U, 256U, &sample_crc) == HAL_OK))
+      {
+        BootLoader_Printf("[QSPI] JEDEC=0x%06lX, sample CRC=0x%08lX\r\n",
+                          (unsigned long)jedec_id,
+                          (unsigned long)sample_crc);
+      }
+      else
+      {
+        BootLoader_Printf("[QSPI] read/CRC FAILED\r\n");
+      }
+    }
+    else
+    {
+      BootLoader_Printf("[QSPI] init FAILED\r\n");
+    }
+  }
 
   {
     HAL_StatusTypeDef eeprom_status;

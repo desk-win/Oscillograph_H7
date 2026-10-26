@@ -127,6 +127,17 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
+  .RamFunc :
+  {
+    . = ALIGN(4);
+    _sramfunc = .;
+    KEEP(*(.RamFunc))
+    KEEP(*(.RamFunc*))
+    . = ALIGN(4);
+    _eramfunc = .;
+  } >ITCMRAM AT> FLASH
+  _siramfunc = LOADADDR(.RamFunc);
+
   /* used by the startup to initialize data */
   _sidata = LOADADDR(.data);
 
