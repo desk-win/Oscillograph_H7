@@ -40,6 +40,9 @@ public:
     // Logic_Setting
     void gotoLogic_SettingScreenSlideTransitionEast();
 
+    // OTA_Screen
+    void gotoOTA_ScreenScreenSlideTransitionEast();
+
 protected:
     touchgfx::Callback<FrontendApplicationBase> transitionCallback;
     FrontendHeap& frontendHeap;
@@ -64,6 +67,9 @@ protected:
 
     // Logic_Setting
     void gotoLogic_SettingScreenSlideTransitionEastImpl();
+
+    // OTA_Screen
+    void gotoOTA_ScreenScreenSlideTransitionEastImpl();
 };
 
 #endif // FRONTENDAPPLICATIONBASE_HPP

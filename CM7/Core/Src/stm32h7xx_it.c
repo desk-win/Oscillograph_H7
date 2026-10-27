@@ -22,8 +22,6 @@
 #include "stm32h7xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-/* 中断耗时探针。只为了量"CPU 有多少时间不在任务里", 调完和 osc_probe 一起删。 */
-#include "osc_probe.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,6 +60,8 @@ extern LTDC_HandleTypeDef hltdc;
 extern MDMA_HandleTypeDef hmdma_mdma_channel0_sw_0;
 extern MDMA_HandleTypeDef hmdma_mdma_channel1_sw_0;
 extern SD_HandleTypeDef hsd1;
+extern DMA_HandleTypeDef hdma_usart1_rx;
+extern UART_HandleTypeDef huart1;
 extern TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN EV */
@@ -181,6 +181,34 @@ void EXTI1_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles DMA1 stream2 global interrupt.
+  */
+void DMA1_Stream2_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Stream2_IRQn 0 */
+
+  /* USER CODE END DMA1_Stream2_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart1_rx);
+  /* USER CODE BEGIN DMA1_Stream2_IRQn 1 */
+
+  /* USER CODE END DMA1_Stream2_IRQn 1 */
+}
+
+/**
+  * @brief This function handles USART1 global interrupt.
+  */
+void USART1_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART1_IRQn 0 */
+
+  /* USER CODE END USART1_IRQn 0 */
+  HAL_UART_IRQHandler(&huart1);
+  /* USER CODE BEGIN USART1_IRQn 1 */
+
+  /* USER CODE END USART1_IRQn 1 */
+}
+
+/**
   * @brief This function handles SDMMC1 global interrupt.
   */
 void SDMMC1_IRQHandler(void)
@@ -200,11 +228,9 @@ void SDMMC1_IRQHandler(void)
 void TIM7_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM7_IRQn 0 */
-  OSC_ISR_Enter();   /* HAL 毫秒时基 (优先级 15, 和 SysTick 同级) */
   /* USER CODE END TIM7_IRQn 0 */
   HAL_TIM_IRQHandler(&htim7);
   /* USER CODE BEGIN TIM7_IRQn 1 */
-  OSC_ISR_Exit();
   /* USER CODE END TIM7_IRQn 1 */
 }
 
@@ -214,11 +240,9 @@ void TIM7_IRQHandler(void)
 void LTDC_IRQHandler(void)
 {
   /* USER CODE BEGIN LTDC_IRQn 0 */
-  OSC_ISR_Enter();   /* 优先级 5 */
   /* USER CODE END LTDC_IRQn 0 */
   HAL_LTDC_IRQHandler(&hltdc);
   /* USER CODE BEGIN LTDC_IRQn 1 */
-  OSC_ISR_Exit();
   /* USER CODE END LTDC_IRQn 1 */
 }
 
@@ -228,11 +252,9 @@ void LTDC_IRQHandler(void)
 void DMA2D_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA2D_IRQn 0 */
-  OSC_ISR_Enter();   /* 优先级 5 */
   /* USER CODE END DMA2D_IRQn 0 */
   HAL_DMA2D_IRQHandler(&hdma2d);
   /* USER CODE BEGIN DMA2D_IRQn 1 */
-  OSC_ISR_Exit();
   /* USER CODE END DMA2D_IRQn 1 */
 }
 
@@ -242,12 +264,10 @@ void DMA2D_IRQHandler(void)
 void MDMA_IRQHandler(void)
 {
   /* USER CODE BEGIN MDMA_IRQn 0 */
-  OSC_ISR_Enter();   /* 优先级 0 —— 全芯片最高, 最能饿死别人 */
   /* USER CODE END MDMA_IRQn 0 */
   HAL_MDMA_IRQHandler(&hmdma_mdma_channel0_sw_0);
   HAL_MDMA_IRQHandler(&hmdma_mdma_channel1_sw_0);
   /* USER CODE BEGIN MDMA_IRQn 1 */
-  OSC_ISR_Exit();
   /* USER CODE END MDMA_IRQn 1 */
 }
 

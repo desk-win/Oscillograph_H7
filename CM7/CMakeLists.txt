@@ -47,6 +47,14 @@ set(CMAKE_CXX_FLAGS_DEBUG "-Og -g3")
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O binary
+            $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+            ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin
+    COMMENT "Generating ${CMAKE_PROJECT_NAME}.bin"
+    VERBATIM)
+
 # Re-link when the linker script changes.
 # The .ld only reaches the linker through the -T flag, which Ninja cannot see,
 # so without this an edited linker script leaves the build reporting
@@ -128,7 +136,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/mylcd.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/touch.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/uart_printf.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/osc_probe.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/oscillograph.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/oscillograph_trace.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/logic_trace.c
@@ -137,6 +144,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/logic_save.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/encoder.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/qspi_flash.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/bl24c16f.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/ota.c
 )
 
 # Link directories setup

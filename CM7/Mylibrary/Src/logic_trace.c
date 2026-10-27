@@ -809,7 +809,7 @@ static void LogicScan_Task(void *arg)
 
         if ((f & LOG_REQ_HALF) != 0u) {
 #if LOG_SCAN_DIAG
-            /* 检测点: 整段扫描耗时 (含最后的判满/超时); DWT 由 OSC_Probe_Init 打开 */
+            /* 检测点: 整段扫描耗时 (含最后的判满/超时); DWT 由 LOG_Analyze_Init 打开 */
             const uint32_t t0 = DWT->CYCCNT;
             LOG_Trace_OnHalfFrame();
             const uint32_t d = DWT->CYCCNT - t0;

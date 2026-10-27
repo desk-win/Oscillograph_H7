@@ -38,6 +38,14 @@ start_screenViewBase::start_screenViewBase() :
     textArea2.setLinespacing(0);
     textArea2.setTypedText(touchgfx::TypedText(T___SINGLEUSE_JCR8));
     add(textArea2);
+
+    otabutton.setXY(280, 396);
+    otabutton.setBitmaps(touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_MEDIUM_ROUND_NORMAL_ID), touchgfx::Bitmap(BITMAP_ALTERNATE_THEME_IMAGES_WIDGETS_BUTTON_REGULAR_HEIGHT_50_MEDIUM_ROUND_PRESSED_ID));
+    otabutton.setLabelText(touchgfx::TypedText(T___SINGLEUSE_4HWI));
+    otabutton.setLabelColor(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    otabutton.setLabelColorPressed(touchgfx::Color::getColorFromRGB(255, 255, 255));
+    otabutton.setAction(buttonCallback);
+    add(otabutton);
 }
 
 start_screenViewBase::~start_screenViewBase()
@@ -65,5 +73,12 @@ void start_screenViewBase::buttonCallbackHandler(const touchgfx::AbstractButton&
         //When button2 clicked change screen to Logic
         //Go to Logic with screen transition towards East
         application().gotoLogicScreenSlideTransitionEast();
+    }
+    if (&src == &otabutton)
+    {
+        //Interaction3
+        //When otabutton clicked change screen to OTA_Screen
+        //Go to OTA_Screen with screen transition towards East
+        application().gotoOTA_ScreenScreenSlideTransitionEast();
     }
 }

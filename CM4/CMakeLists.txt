@@ -55,6 +55,14 @@ set(CMAKE_C_FLAGS_DEBUG "-O2 -g3")
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O binary
+            $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+            ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin
+    COMMENT "Generating ${CMAKE_PROJECT_NAME}.bin"
+    VERBATIM)
+
 # Re-link when the linker script changes.
 # The .ld only reaches the linker through the -T flag, which Ninja cannot see,
 # so without this an edited linker script leaves the build reporting

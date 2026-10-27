@@ -31,6 +31,8 @@ set(TouchGFX_Src
     ${CMAKE_SOURCE_DIR}/TouchGFX/gui/src/osc_setting_screen/OSC_SettingView.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/gui/src/oscillograph_screen/OscillographPresenter.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/gui/src/oscillograph_screen/OscillographView.cpp
+    ${CMAKE_SOURCE_DIR}/TouchGFX/gui/src/ota_screen_screen/OTA_ScreenPresenter.cpp
+    ${CMAKE_SOURCE_DIR}/TouchGFX/gui/src/ota_screen_screen/OTA_ScreenView.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/gui/src/start_screen_screen/start_screenPresenter.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/gui/src/start_screen_screen/start_screenView.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/fonts/src/ApplicationFontProvider.cpp
@@ -56,17 +58,22 @@ set(TouchGFX_Src
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/gui_generated/src/logic_setting_screen/Logic_SettingViewBase.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/gui_generated/src/osc_setting_screen/OSC_SettingViewBase.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/gui_generated/src/oscillograph_screen/OscillographViewBase.cpp
+    ${CMAKE_SOURCE_DIR}/TouchGFX/generated/gui_generated/src/ota_screen_screen/OTA_ScreenViewBase.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/gui_generated/src/start_screen_screen/start_screenViewBase.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/BitmapDatabase.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/SVGDatabase.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_medium_round_inactive.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_medium_round_normal.cpp
+    ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_medium_round_pressed.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_medium_rounded_normal.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_medium_rounded_pressed.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_small_rounded_normal.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_small_rounded_pressed.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_tiny_round_normal.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_button_regular_height_50_tiny_round_pressed.cpp
+    ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_slider_horizontal_thick_filler_medium.cpp
+    ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_slider_horizontal_thick_round_active.cpp
+    ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_slider_horizontal_thick_track_medium.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_togglebutton_medium_rounded_text_off_normal.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_togglebutton_medium_rounded_text_on_light.cpp
     ${CMAKE_SOURCE_DIR}/TouchGFX/generated/images/src/__generated/image_alternate_theme_images_widgets_togglebutton_small_round_small_off_light.cpp

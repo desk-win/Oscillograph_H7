@@ -66,6 +66,28 @@
               "Blue": 247
             },
             "AutoSize": true
+          },
+          {
+            "Type": "ButtonWithLabel",
+            "Name": "otabutton",
+            "X": 280,
+            "Y": 396,
+            "Width": 240,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_round_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_round_normal.png",
+            "TextId": "__SingleUse_4HWI",
+            "ReleasedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "PressedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "TextRotation": "0"
           }
         ],
         "Interactions": [
@@ -93,6 +115,19 @@
               "ScreenTransitionType": "ScreenTransitionSlide",
               "ScreenTransitionDirection": "East",
               "ActionComponent": "Logic"
+            }
+          },
+          {
+            "InteractionName": "Interaction3",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "otabutton"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionSlide",
+              "ScreenTransitionDirection": "East",
+              "ActionComponent": "OTA_Screen"
             }
           }
         ]
@@ -1818,6 +1853,94 @@
               "ScreenTransitionType": "ScreenTransitionSlide",
               "ScreenTransitionDirection": "East",
               "ActionComponent": "Logic"
+            }
+          }
+        ]
+      },
+      {
+        "Name": "OTA_Screen",
+        "Components": [
+          {
+            "Type": "Box",
+            "Name": "box1",
+            "Width": 800,
+            "Height": 480,
+            "Color": {
+              "Red": 5,
+              "Green": 5,
+              "Blue": 5
+            }
+          },
+          {
+            "Type": "ButtonWithLabel",
+            "Name": "back",
+            "Width": 240,
+            "Height": 50,
+            "Pressed": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_pressed.png",
+            "Released": "__generated\\alternate_theme_images_widgets_button_regular_height_50_medium_rounded_normal.png",
+            "TextId": "__SingleUse_JPH5",
+            "ReleasedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "PressedColor": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "TextRotation": "0",
+            "Preset": "alternate_theme\\presets\\button\\regular\\height_50\\medium_rounded_normal.json"
+          },
+          {
+            "Type": "Slider",
+            "Name": "slider1",
+            "X": 234,
+            "Y": 218,
+            "Width": 332,
+            "Height": 32,
+            "IsHorizontalSlider": true,
+            "BackgroundUnselected": "__generated\\alternate_theme_images_widgets_slider_horizontal_thick_track_medium.png",
+            "BackgroundSelected": "__generated\\alternate_theme_images_widgets_slider_horizontal_thick_filler_medium.png",
+            "Indicator": "__generated\\alternate_theme_images_widgets_slider_horizontal_thick_round_active.png",
+            "BackgroundX": 16,
+            "BackgroundY": 11,
+            "IndicatorMax": 300,
+            "ValueMax": 100
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea1",
+            "X": 378,
+            "Y": 287,
+            "Width": 170,
+            "Height": 27,
+            "TextId": "__SingleUse_W9UR",
+            "TextRotation": "0",
+            "Color": {
+              "Red": 255,
+              "Green": 255,
+              "Blue": 255
+            },
+            "Wildcard1": {
+              "UseBuffer": true,
+              "BufferSize": 10
+            },
+            "WideTextAction": 6
+          }
+        ],
+        "Interactions": [
+          {
+            "InteractionName": "Interaction1",
+            "Trigger": {
+              "Type": "TriggerClicked",
+              "TriggerComponent": "back"
+            },
+            "Action": {
+              "Type": "ActionGotoScreen",
+              "ScreenTransitionType": "ScreenTransitionSlide",
+              "ScreenTransitionDirection": "East",
+              "ActionComponent": "start_screen"
             }
           }
         ]

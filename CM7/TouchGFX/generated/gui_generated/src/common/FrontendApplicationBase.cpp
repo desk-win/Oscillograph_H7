@@ -20,6 +20,8 @@
 #include <gui/osc_setting_screen/OSC_SettingPresenter.hpp>
 #include <gui/logic_setting_screen/Logic_SettingView.hpp>
 #include <gui/logic_setting_screen/Logic_SettingPresenter.hpp>
+#include <gui/ota_screen_screen/OTA_ScreenView.hpp>
+#include <gui/ota_screen_screen/OTA_ScreenPresenter.hpp>
 
 using namespace touchgfx;
 
@@ -124,4 +126,17 @@ void FrontendApplicationBase::gotoLogic_SettingScreenSlideTransitionEast()
 void FrontendApplicationBase::gotoLogic_SettingScreenSlideTransitionEastImpl()
 {
     touchgfx::makeTransition<Logic_SettingView, Logic_SettingPresenter, touchgfx::SlideTransition<EAST>, Model >(&currentScreen, &currentPresenter, frontendHeap, &currentTransition, &model);
+}
+
+// OTA_Screen
+
+void FrontendApplicationBase::gotoOTA_ScreenScreenSlideTransitionEast()
+{
+    transitionCallback = touchgfx::Callback<FrontendApplicationBase>(this, &FrontendApplicationBase::gotoOTA_ScreenScreenSlideTransitionEastImpl);
+    pendingScreenTransitionCallback = &transitionCallback;
+}
+
+void FrontendApplicationBase::gotoOTA_ScreenScreenSlideTransitionEastImpl()
+{
+    touchgfx::makeTransition<OTA_ScreenView, OTA_ScreenPresenter, touchgfx::SlideTransition<EAST>, Model >(&currentScreen, &currentPresenter, frontendHeap, &currentTransition, &model);
 }

@@ -10,6 +10,7 @@
 #include <touchgfx/widgets/Box.hpp>
 #include <touchgfx/widgets/Button.hpp>
 #include <touchgfx/widgets/TextArea.hpp>
+#include <touchgfx/widgets/ButtonWithLabel.hpp>
 
 class start_screenViewBase : public touchgfx::View<start_screenPresenter>
 {
@@ -32,6 +33,7 @@ protected:
     touchgfx::Button button2;
     touchgfx::TextArea textArea1;
     touchgfx::TextArea textArea2;
+    touchgfx::ButtonWithLabel otabutton;
 
 private:
 

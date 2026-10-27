@@ -5,8 +5,20 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+volatile uint8_t g_uart1_printf_enabled = 1U;
+
+void UART1_PrintfSetEnabled(uint8_t enabled)
+{
+    g_uart1_printf_enabled = enabled;
+}
+
 void uart1_printf(char *fmt, ...)
 {
+    if (g_uart1_printf_enabled == 0U)
+    {
+        return;
+    }
+
     va_list ap;
     va_start(ap, fmt);
     char buf[128];
@@ -22,6 +34,9 @@ void uart1_printf(char *fmt, ...)
 
 int __io_putchar(int ch)
 {
-    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 100);
+    if (g_uart1_printf_enabled != 0U)
+    {
+        HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 100);
+    }
     return ch;
 }

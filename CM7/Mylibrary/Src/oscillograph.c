@@ -8,7 +8,6 @@
 #include "oscillograph.h"
 #include "logic_trace.h" /* LOG_Trace_OnHalfFrame —— 2 号信号量那一路的落点 */
 #include "mdma.h"
-#include "osc_probe.h"   /* OSC_ISR_Enter / Exit —— 只用于中断计时, 调试完一起删 */
 #include <stdint.h>
 
 /* ---- 对外可见的诊断计数 (结构见 oscillograph.h) ---- */
@@ -92,9 +91,7 @@ void M7_OSC_Init(void)
  * 名字不能改 —— 改了就静默落回 Default_Handler 死循环。 */
 void HSEM1_IRQHandler(void)
 {
-    OSC_ISR_Enter();         /* 计时用, 见 osc_probe.h */
     HAL_HSEM_IRQHandler();   /* 读 C1MISR → 清使能位 → 清标志 → 回调 */
-    OSC_ISR_Exit();
 }
 
 /* 信号量释放的中断回调。**两路通知都从这里进** —— HSEM 是每核一条中断线, 不是

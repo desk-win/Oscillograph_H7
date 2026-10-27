@@ -6,8 +6,10 @@
 #include "crc32.h"
 #include "qspi_flash.h"
 
+// noinline 禁止编译器把该函数内联到 Flash 中的调用者里，否则函数即使被放进 RAM 段，实际执行时也可能变成 Flash 里的内联代码。
 #define INTERNAL_FLASH_RAMFUNC \
     __attribute__((section(".RamFunc"), noinline))
+// inline + always_inline：强制编译器把函数体直接展开到调用处
 #define INTERNAL_FLASH_INLINE \
     static inline __attribute__((always_inline))
 

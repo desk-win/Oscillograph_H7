@@ -28,13 +28,9 @@
 #include "cmsis_os2.h"
 #include <stdint.h>
 
-/* DWT 周期计数器 (0xE0001004), 和 osc_probe.h 里 OSC_PROBE_CYC 是同一个地址。
+/* DWT 周期计数器 (0xE0001004), 用于测量解码耗时。
  *
- * 这里自己写一份而不是 include osc_probe.h: 那份探针的文件头写着"调完请把这份
- * 一起删掉", 解码这一层没有理由跟着它一起消失。
- *
- * 计数器由 OSC_Probe_Init() (Model 构造函数里调) 解锁。哪天探针真被删了, 这个
- * 读数会恒为 0 —— 只影响 log_ana_diag_cyc 这一列诊断, 不影响解码本身。 */
+ * 计数器由 LOG_Analyze_Init() 解锁并打开。 */
 #define LOG_ANA_CYC (*(volatile uint32_t *)0xE0001004u)
 
 /* 逻辑通道号 1..8 → GPIOG 的位号。和 logic_trace.c 用的是同一张表
@@ -992,6 +988,10 @@ static uint32_t decode_fs_hz(void)
 
 void LOG_Analyze_Init(void)
 {
+    *(volatile uint32_t *)0xE0001FB0u = 0xC5ACCE55u;   /* DWT->LAR */
+    *(volatile uint32_t *)0xE000EDFCu |= (1u << 24);   /* DEMCR.TRCENA */
+    *(volatile uint32_t *)0xE0001000u |= 1u;           /* DWT_CTRL.CYCCNTENA */
+
     s_count = 0u;
 
     /* 默认值必须和设置屏那边**开机时显示的那一份**一模一样, 否则会出现

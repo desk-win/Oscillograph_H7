@@ -39,6 +39,9 @@
     <ClCompile Include="..\..\gui\src\logic_setting_screen\Logic_SettingPresenter.cpp"/>
     <ClCompile Include="..\..\gui\src\logic_setting_screen\Logic_SettingView.cpp"/>
     <ClCompile Include="..\..\generated\gui_generated\src\logic_setting_screen\Logic_SettingViewBase.cpp"/>
+    <ClCompile Include="..\..\gui\src\ota_screen_screen\OTA_ScreenPresenter.cpp"/>
+    <ClCompile Include="..\..\gui\src\ota_screen_screen\OTA_ScreenView.cpp"/>
+    <ClCompile Include="..\..\generated\gui_generated\src\ota_screen_screen\OTA_ScreenViewBase.cpp"/>
   </ItemGroup>
   <ItemGroup>
     <None Include="$(ApplicationRoot)\assets\texts\texts.xml"/>
@@ -207,6 +210,9 @@
     <ClInclude Include="..\..\gui\include\gui\logic_setting_screen\Logic_SettingPresenter.hpp"/>
     <ClInclude Include="..\..\gui\include\gui\logic_setting_screen\Logic_SettingView.hpp"/>
     <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\logic_setting_screen\Logic_SettingViewBase.hpp"/>
+    <ClInclude Include="..\..\gui\include\gui\ota_screen_screen\OTA_ScreenPresenter.hpp"/>
+    <ClInclude Include="..\..\gui\include\gui\ota_screen_screen\OTA_ScreenView.hpp"/>
+    <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\ota_screen_screen\OTA_ScreenViewBase.hpp"/>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="$(ApplicationRoot)\generated\simulator\touchgfx.rc"/>

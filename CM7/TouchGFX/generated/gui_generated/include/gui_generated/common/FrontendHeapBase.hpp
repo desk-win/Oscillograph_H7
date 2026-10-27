@@ -26,6 +26,8 @@
 #include <gui/osc_setting_screen/OSC_SettingPresenter.hpp>
 #include <gui/logic_setting_screen/Logic_SettingView.hpp>
 #include <gui/logic_setting_screen/Logic_SettingPresenter.hpp>
+#include <gui/ota_screen_screen/OTA_ScreenView.hpp>
+#include <gui/ota_screen_screen/OTA_ScreenPresenter.hpp>
 
 
 /**
@@ -54,7 +56,8 @@ public:
             touchgfx::meta::TypeList< Logic_DataView,
             touchgfx::meta::TypeList< OSC_SettingView,
             touchgfx::meta::TypeList< Logic_SettingView,
-            touchgfx::meta::Nil > > > > >
+            touchgfx::meta::TypeList< OTA_ScreenView,
+            touchgfx::meta::Nil > > > > > >
             > GeneratedViewTypes;
 
     /**
@@ -72,7 +75,8 @@ public:
             touchgfx::meta::TypeList< Logic_DataPresenter,
             touchgfx::meta::TypeList< OSC_SettingPresenter,
             touchgfx::meta::TypeList< Logic_SettingPresenter,
-            touchgfx::meta::Nil > > > > >
+            touchgfx::meta::TypeList< OTA_ScreenPresenter,
+            touchgfx::meta::Nil > > > > > >
             > GeneratedPresenterTypes;
 
     /**

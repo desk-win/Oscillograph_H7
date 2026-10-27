@@ -1,6 +1,5 @@
 #include <gui/model/Model.hpp>
 #include <gui/model/ModelListener.hpp>
-#include "osc_probe.h"
 #include "encoder.h"
 #include "logic_save.h"    /* LOG_Save_Init / LOG_Save_Request */
 #include "oscillograph.h"   /* M7_OSC_SetFrontend —— 换放大倍数 (引脚在 CM4 那边) */
@@ -19,16 +18,6 @@
 #define OSC_DBG_SKIP_BUILD  0
 #define OSC_DBG_SKIP_GRAPH  0
 
-/* ===========================================================================
- * 调优探针 (osc_probe.h) —— 量一帧里各段各花了多少
- *
- * 处理点击的代码和 tick() 在同一个任务里, 所以"开关一开画面就卡、按关闭要
- * 等一会儿"这种症状, 根子必然在 tick 这一帧多花掉的时间上。具体怎么读那几
- * 个计数器, 看 osc_probe.h 的文件头。
- *
- * 探针本身不在这里实现, 这里只负责在正确的时刻取值。
- * ========================================================================= */
-
 /* 初始化列表的顺序必须和 Model.hpp 里**成员声明的顺序**一致, 否则 -Wreorder
  * 会警告 (而且真跑起来是按声明顺序初始化的, 列表写成什么样都没用)。 */
 Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
@@ -36,8 +25,6 @@ Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
                  oscSelected(OSC_TRACE_CH1),
                  logicPubSeq(0u), logicDecodeReq(false)
 {
-    OSC_Probe_Init();
-
     /* 编码器的初始状态: 选中 CH1, 两路都是"调时基", 放大倍数都是 X1。
      *
      * 时基档位不在这儿初始化 —— 它存在 oscillograph_trace.c 的 s_tb_idx 里,
@@ -403,27 +390,6 @@ void Model::commitOscEdit()
 
 void Model::tick()
 {
-    /* 帧周期探针放在最前面 —— 没在采集的时候也要量, 那是"不卡"的基准值,
-     * 有对照才知道慢了多少。 */
-    static uint32_t lastEntry;
-    const uint32_t now = OSC_PROBE_CYC;
-    g_dbg_tick_cnt++;   /* 累计调用次数 —— 除以 dt 就是真实帧率 */
-    if (lastEntry != 0u)
-    {
-        const uint32_t gap = now - lastEntry;
-        g_dbg_gap_cyc = gap;
-        if (gap > g_dbg_gap_max_cyc) g_dbg_gap_max_cyc = gap;
-        if (g_dbg_gap_min_cyc == 0u || gap < g_dbg_gap_min_cyc)
-        {
-            g_dbg_gap_min_cyc = gap;
-        }
-        if (gap > g_osc_probe_stall_cyc)       /* > 50 ms = 卡了一回 */
-        {
-            g_dbg_stall_cnt++;
-        }
-    }
-    lastEntry = now;
-
     /* ---- 编码器 ----
      *
      * 必须**每个 tick 都读**, 不管当前是哪一屏: Encoder_Increment() 是有状态的
@@ -602,7 +568,6 @@ void Model::tick()
     }
     tickDiv = OSC_Trace_RefreshTicks() - 1u;
 
-    const uint32_t tBuild = OSC_PROBE_CYC;
     /* 每一路这一屏的测量结果 (峰峰值 / 频率)。放在这里当局部量: 它只活到下面
      * 那一次 traceUpdated —— View 是同步把它格式化成文字写进控件的, 不存指针。 */
     osc_meas_t meas1;
@@ -620,8 +585,6 @@ void Model::tick()
     const bool ok1 = OSC_Trace_Build(OSC_TRACE_CH1, traceY[0], &meas1) != 0;
     const bool ok2 = OSC_Trace_Build(OSC_TRACE_CH2, traceY[1], &meas2) != 0;
 #endif
-    g_dbg_build_cyc = OSC_PROBE_CYC - tBuild;
-
     /* 两个都返回 0 就不通知 View —— 屏幕上留着上一次的波形, 不会有半截波形
      * 闪一下。(这一路停着、或者刚 Start 还没凑够一屏, 都会返回 0。)
      *
@@ -634,12 +597,8 @@ void Model::tick()
      * 这一屏的、波形还在上一屏"。 */
     if ((ok1 || ok2) && modelListener != 0)
     {
-#if OSC_DBG_SKIP_GRAPH
-        g_dbg_graph_cyc = 0u;       /* 分半用: 只量抽点, 不画 */
-#else
-        const uint32_t tGraph = OSC_PROBE_CYC;
+#if !OSC_DBG_SKIP_GRAPH
         modelListener->traceUpdated(traceY[0], traceY[1], &meas1, &meas2, ok1, ok2);
-        g_dbg_graph_cyc = OSC_PROBE_CYC - tGraph;
 #endif
     }
 }

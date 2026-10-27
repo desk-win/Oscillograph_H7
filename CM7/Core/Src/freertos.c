@@ -30,11 +30,11 @@
 #include <stdint.h>
 #include <sys/_types.h>
 #include "uart_printf.h"
-#include "osc_probe.h"
 #include "encoder.h"
 #include "logic_analyze.h"
 #include "logic_save.h"
 #include "qspi_flash.h"
+#include "ota.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -133,6 +133,12 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   xTaskCreate(TouchGFX_Task, "TouchGfxTask", 4096, NULL, osPriorityAboveNormal1, NULL);
+
+  if (OTA_TaskCreate() != pdPASS)
+  {
+    taskDISABLE_INTERRUPTS();
+    for (;;) { }
+  }
 
   /* 逻辑分析仪协议解码: 只读冻结的记录表, 无期限 —— 放 TouchGFX 之下。
    * 栈 1 KB (解码器里最大的局部量是 CAN 的 128 字节位数组)。 */

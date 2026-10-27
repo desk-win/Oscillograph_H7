@@ -244,6 +244,18 @@
     <Filter Include="Header Files\generated\gui_generated\logic_setting_screen">
       <UniqueIdentifier>E7FA93BA-3DB0-9291-53E4-33F6CB04D78D</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\gui\ota_screen_screen">
+      <UniqueIdentifier>F76F6C5C-B47C-B16E-377B-57D7557F6747</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\gui\ota_screen_screen">
+      <UniqueIdentifier>8F1F4007-EE13-DB03-BFC1-835484D07B4B</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\generated\gui_generated\ota_screen_screen">
+      <UniqueIdentifier>DE89A4BD-7310-F64C-D678-744A3930EC6B</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\generated\gui_generated\ota_screen_screen">
+      <UniqueIdentifier>88F259DA-2C46-92B0-A67E-477C6084C2F7</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(TouchGFXReleasePath)\framework\source\platform\driver\touch\SDL2TouchController.cpp">
@@ -329,6 +341,15 @@
     </ClCompile>
     <ClCompile Include="..\..\generated\gui_generated\src\logic_setting_screen\Logic_SettingViewBase.cpp">
       <Filter>Source Files\generated\gui_generated\logic_setting_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\gui\src\ota_screen_screen\OTA_ScreenPresenter.cpp">
+      <Filter>Source Files\gui\ota_screen_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\gui\src\ota_screen_screen\OTA_ScreenView.cpp">
+      <Filter>Source Files\gui\ota_screen_screen</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\generated\gui_generated\src\ota_screen_screen\OTA_ScreenViewBase.cpp">
+      <Filter>Source Files\generated\gui_generated\ota_screen_screen</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -825,6 +846,15 @@
     </ClInclude>
     <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\logic_setting_screen\Logic_SettingViewBase.hpp">
       <Filter>Header Files\generated\gui_generated\logic_setting_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\gui\include\gui\ota_screen_screen\OTA_ScreenPresenter.hpp">
+      <Filter>Header Files\gui\ota_screen_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\gui\include\gui\ota_screen_screen\OTA_ScreenView.hpp">
+      <Filter>Header Files\gui\ota_screen_screen</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\generated\gui_generated\include\gui_generated\ota_screen_screen\OTA_ScreenViewBase.hpp">
+      <Filter>Header Files\generated\gui_generated\ota_screen_screen</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
