@@ -5,6 +5,10 @@
 #include "usart.h"
 #include "uart_printf.h"
 
+#ifndef OTA_DEBUG_LOG
+#define OTA_DEBUG_LOG 1U
+#endif
+
 /** OTA 任务栈大小，单位为字。 */
 #define OTA_TASK_STACK_WORDS 1024U
 
@@ -75,6 +79,20 @@ static uint32_t s_image_size;
 static uint32_t s_received_size;
 /** 下一个期望收到的数据块序号。 */
 static uint8_t s_expected_sequence;
+/** 当前接收阶段，用于失败后定位。 */
+static const char *s_stage = "idle";
+/** 当前阶段内的错误细节。 */
+static const char *s_detail = "none";
+/** 最近一次 UART 错误码。 */
+static volatile uint32_t s_uart_error;
+
+#if OTA_DEBUG_LOG
+#define OTA_SET_STAGE(value)  (s_stage = (value))
+#define OTA_SET_DETAIL(value) (s_detail = (value))
+#else
+#define OTA_SET_STAGE(value)  ((void)0)
+#define OTA_SET_DETAIL(value) ((void)0)
+#endif
 
 _Static_assert(OTA_DMA_BUFFER_SIZE >= 1029U,
                "OTA DMA buffer must fit one Ymodem frame");
@@ -136,8 +154,10 @@ static uint8_t OTA_ParseFrame(uint16_t size, OTA_Frame *frame)
     uint16_t expected_size;
     uint16_t received_crc;
 
+    OTA_SET_DETAIL("none");
     if ((frame == NULL) || (size == 0U))
     {
+        OTA_SET_DETAIL("empty");
         return 0U;
     }
 
@@ -164,16 +184,19 @@ static uint8_t OTA_ParseFrame(uint16_t size, OTA_Frame *frame)
     }
     else
     {
+        OTA_SET_DETAIL("marker");
         return 0U;
     }
 
     expected_size = (uint16_t)(data_size + 5U);
     if (size != expected_size)
     {
+        OTA_SET_DETAIL("length");
         return 0U;
     }
     if ((uint8_t)(s_dma_buffer[1] ^ s_dma_buffer[2]) != 0xFFU)
     {
+        OTA_SET_DETAIL("header");
         return 0U;
     }
 
@@ -181,6 +204,7 @@ static uint8_t OTA_ParseFrame(uint16_t size, OTA_Frame *frame)
                    s_dma_buffer[4U + data_size];
     if (OTA_Crc16(&s_dma_buffer[3], data_size) != received_crc)
     {
+        OTA_SET_DETAIL("crc");
         return 0U;
     }
 
@@ -218,6 +242,10 @@ static uint8_t OTA_ParseImageSize(const uint8_t *data,
 
     while ((pos < size) && (data[pos] != 0U))
     {
+        if (data[pos] == (uint8_t)' ')
+        {
+            break;
+        }
         if ((data[pos] < (uint8_t)'0') || (data[pos] > (uint8_t)'9'))
         {
             return 0U;
@@ -231,7 +259,7 @@ static uint8_t OTA_ParseImageSize(const uint8_t *data,
         pos++;
     }
 
-    if ((digits == 0U) || (pos >= size) || (value == 0U) ||
+    if ((digits == 0U) || (value == 0U) ||
         (value > QSPI_FLASH_SIZE_BYTES))
     {
         return 0U;
@@ -276,28 +304,38 @@ static HAL_StatusTypeDef OTA_EraseImage(uint32_t image_size)
  */
 static void OTA_Finish(OTA_State state)
 {
-    static const char success_text[] = "[OTA] TRANSFER OK\r\n";
-    static const char failed_text[] = "[OTA] TRANSFER FAILED\r\n";
+    uint32_t received_size = s_received_size;
+    uint32_t image_size = s_image_size;
+    uint32_t rx_event = s_rx_event_type;
+    uint32_t uart_error = s_uart_error;
+    uint16_t last_rx_size = s_rx_size;
+    uint8_t sequence = s_expected_sequence;
 
     (void)HAL_UART_AbortReceive(&huart1);
     s_ota_active = 0U;
     s_state = state;
+    UART1_PrintfSetEnabled(1U);
 
-    /* 临时结果输出：在 Ymodem 最终应答之后发送，方便上位机直接观察。 */
+#if OTA_DEBUG_LOG
+    /* 只在 Ymodem 会话结束后输出，避免文本混入协议流。 */
     if (state == OTA_STATE_DONE)
     {
-        (void)HAL_UART_Transmit(&huart1, (uint8_t *)success_text,
-                                sizeof(success_text) - 1U,
-                                OTA_UART_TIMEOUT_MS);
+        OTA_SET_STAGE("done");
+        uart1_printf("[OTA] TRANSFER OK st=%s rx=%lu/%lu\r\n",
+                     s_stage, (unsigned long)received_size,
+                     (unsigned long)image_size);
     }
     else if (state == OTA_STATE_FAILED)
     {
-        (void)HAL_UART_Transmit(&huart1, (uint8_t *)failed_text,
-                                sizeof(failed_text) - 1U,
-                                OTA_UART_TIMEOUT_MS);
+        uart1_printf("[OTA] TRANSFER FAILED st=%s d=%s sq=%u\r\n",
+                     s_stage, s_detail, sequence);
+        uart1_printf("[OTA] rx=%lu/%lu last=%u ev=%lu first=%02X err=0x%08lX\r\n",
+                     (unsigned long)received_size, (unsigned long)image_size,
+                     last_rx_size, (unsigned long)rx_event,
+                     (last_rx_size > 0U) ? s_dma_buffer[0] : 0U,
+                     (unsigned long)uart_error);
     }
-
-    UART1_PrintfSetEnabled(1U);
+#endif
 }
 
 /**
@@ -321,6 +359,7 @@ static uint8_t OTA_RearmOrFail(void)
 {
     if (OTA_ArmDma() != HAL_OK)
     {
+        OTA_SET_DETAIL("dma-arm");
         OTA_Fail();
         return 0U;
     }
@@ -333,22 +372,29 @@ static uint8_t OTA_RearmOrFail(void)
  */
 static void OTA_StartSession(void)
 {
+    OTA_SET_STAGE("init");
+    OTA_SET_DETAIL("none");
     s_image_size = 0U;
     s_received_size = 0U;
     s_expected_sequence = 1U;
     s_state = OTA_STATE_WAIT_BLOCK0;
     s_ota_active = 1U;
+    s_uart_error = 0U;
 
+    OTA_SET_STAGE("qspi-init");
     if (QSPI_FLASH_Init() != HAL_OK)
     {
+        OTA_SET_DETAIL("qspi-init");
         OTA_Fail();
         return;
     }
+    OTA_SET_STAGE("dma-arm");
     if (!OTA_RearmOrFail())
     {
         return;
     }
 
+    OTA_SET_STAGE("wait-block0");
     OTA_SendByte(OTA_YMODEM_C);
 }
 
@@ -362,33 +408,48 @@ static void OTA_HandleBlock0(const OTA_Frame *frame)
     if ((s_state == OTA_STATE_WAIT_FINAL_BLOCK) &&
         (frame->data_size > 0U) && (frame->data[0] == 0U))
     {
+        OTA_SET_STAGE("final-block");
         OTA_SendByte(OTA_YMODEM_ACK);
         OTA_Finish(OTA_STATE_DONE);
         return;
     }
 
-    if ((s_state != OTA_STATE_WAIT_BLOCK0) ||
-        !OTA_ParseImageSize(frame->data, frame->data_size, &s_image_size))
+    if (s_state != OTA_STATE_WAIT_BLOCK0)
     {
+        OTA_SET_STAGE("block0-state");
         OTA_Fail();
         return;
     }
+    if (!OTA_ParseImageSize(frame->data, frame->data_size, &s_image_size))
+    {
+        OTA_SET_STAGE("block0-parse");
+        OTA_SET_DETAIL("size");
+        OTA_Fail();
+        return;
+    }
+    OTA_SET_STAGE("block0-ack");
+    (void)HAL_UART_AbortReceive(&huart1);
+    (void)xTaskNotifyStateClear(NULL);
+    OTA_SendByte(OTA_YMODEM_ACK);
+
+    OTA_SET_STAGE("erase");
     if (OTA_EraseImage(s_image_size) != HAL_OK)
     {
+        OTA_SET_DETAIL("qspi-erase");
         OTA_Fail();
         return;
     }
-
     s_received_size = 0U;
     s_expected_sequence = 1U;
     s_state = OTA_STATE_RECEIVING;
 
+    OTA_SET_STAGE("block0-c");
     if (!OTA_RearmOrFail())
     {
         return;
     }
-    OTA_SendByte(OTA_YMODEM_ACK);
     OTA_SendByte(OTA_YMODEM_C);
+    OTA_SET_STAGE("receive-data");
 }
 
 /**
@@ -403,12 +464,14 @@ static void OTA_HandleData(const OTA_Frame *frame)
 
     if (s_state != OTA_STATE_RECEIVING)
     {
+        OTA_SET_STAGE("data-state");
         OTA_Fail();
         return;
     }
 
     if (frame->sequence == (uint8_t)(s_expected_sequence - 1U))
     {
+        OTA_SET_STAGE("dup-block");
         if (OTA_RearmOrFail())
         {
             OTA_SendByte(OTA_YMODEM_ACK);
@@ -418,6 +481,7 @@ static void OTA_HandleData(const OTA_Frame *frame)
 
     if (frame->sequence != s_expected_sequence)
     {
+        OTA_SET_STAGE("seq-mismatch");
         if (OTA_RearmOrFail())
         {
             OTA_SendByte(OTA_YMODEM_NAK);
@@ -428,6 +492,7 @@ static void OTA_HandleData(const OTA_Frame *frame)
     remaining = s_image_size - s_received_size;
     if ((frame->data_size == 0U) || (remaining == 0U))
     {
+        OTA_SET_STAGE("data-length");
         OTA_Fail();
         return;
     }
@@ -435,9 +500,11 @@ static void OTA_HandleData(const OTA_Frame *frame)
     write_size = ((uint32_t)frame->data_size > remaining)
                ? remaining
                : frame->data_size;
+    OTA_SET_STAGE("qspi-write");
     if (QSPI_FLASH_Write(OTA_EXTERNAL_IMAGE_ADDRESS + s_received_size,
                          frame->data, write_size) != HAL_OK)
     {
+        OTA_SET_DETAIL("qspi-write");
         OTA_Fail();
         return;
     }
@@ -445,11 +512,13 @@ static void OTA_HandleData(const OTA_Frame *frame)
     s_received_size += write_size;
     s_expected_sequence++;
 
+    OTA_SET_STAGE("data-ack");
     if (!OTA_RearmOrFail())
     {
         return;
     }
     OTA_SendByte(OTA_YMODEM_ACK);
+    OTA_SET_STAGE("receive-data");
 }
 
 /**
@@ -462,20 +531,24 @@ static void OTA_HandleEot(void)
     {
         if (s_received_size != s_image_size)
         {
+            OTA_SET_STAGE("eot-size");
             OTA_Fail();
             return;
         }
 
         /* 标准 Ymodem：EOT 后回复 ACK + C，等待结束空 Block 0。 */
         s_state = OTA_STATE_WAIT_FINAL_BLOCK;
+        OTA_SET_STAGE("eot-ack");
         if (OTA_RearmOrFail())
         {
             OTA_SendByte(OTA_YMODEM_ACK);
             OTA_SendByte(OTA_YMODEM_C);
+            OTA_SET_STAGE("wait-final-block");
         }
     }
     else if (s_state == OTA_STATE_WAIT_FINAL_BLOCK)
     {
+        OTA_SET_STAGE("eot-final");
         OTA_Finish(OTA_STATE_DONE);
     }
 }
@@ -491,6 +564,7 @@ static void OTA_ProcessRx(uint16_t size)
 
     if (!OTA_ParseFrame(size, &frame))
     {
+        OTA_SET_STAGE("frame-parse");
         if (OTA_RearmOrFail())
         {
             OTA_SendByte(OTA_YMODEM_NAK);
@@ -501,7 +575,9 @@ static void OTA_ProcessRx(uint16_t size)
     switch (frame.type)
     {
     case OTA_FRAME_DATA:
-        if (frame.sequence == 0U)
+        if ((frame.sequence == 0U) &&
+            ((s_state == OTA_STATE_WAIT_BLOCK0) ||
+             (s_state == OTA_STATE_WAIT_FINAL_BLOCK)))
         {
             OTA_HandleBlock0(&frame);
         }
@@ -516,8 +592,12 @@ static void OTA_ProcessRx(uint16_t size)
         break;
 
     case OTA_FRAME_CANCEL:
+        OTA_Finish(OTA_STATE_FAILED);
+        break;
+
     case OTA_FRAME_INVALID:
     default:
+        OTA_SET_STAGE("frame-invalid");
         OTA_Finish(OTA_STATE_FAILED);
         break;
     }
@@ -555,14 +635,17 @@ static void OTA_Task(void *argument)
         {
             if (s_state == OTA_STATE_WAIT_BLOCK0)
             {
+                OTA_SET_STAGE("block0-timeout");
                 OTA_SendByte(OTA_YMODEM_C);
             }
             else if (s_state == OTA_STATE_RECEIVING)
             {
+                OTA_SET_STAGE("data-timeout");
                 OTA_SendByte(OTA_YMODEM_NAK);
             }
             else if (s_state == OTA_STATE_WAIT_FINAL_BLOCK)
             {
+                OTA_SET_STAGE("final-timeout");
                 OTA_Finish(OTA_STATE_DONE);
             }
             continue;
@@ -584,11 +667,14 @@ static void OTA_Task(void *argument)
 
         if ((events & OTA_EVENT_ERROR) != 0U)
         {
+            OTA_SET_STAGE("uart-error");
+            OTA_SET_DETAIL("uart");
             OTA_Finish(OTA_STATE_FAILED);
         }
 
         if ((events & OTA_EVENT_STOP) != 0U)
         {
+            OTA_SET_STAGE("stop");
             OTA_Finish(OTA_STATE_IDLE);
         }
     }
@@ -650,13 +736,17 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 
     if ((huart == &huart1) && (s_ota_active != 0U))
     {
-        /* 中断只记录长度和事件类型，不在中断中解析或写 Flash。 */
-        s_rx_size = Size;
-        s_rx_event_type = huart->RxEventType;
-        __DMB();
-        (void)OTA_NotifyFromISR(OTA_EVENT_RX,
-                                &higher_priority_task_woken);
-        portYIELD_FROM_ISR(higher_priority_task_woken);
+        if ((huart->RxEventType == HAL_UART_RXEVENT_IDLE) ||
+            (huart->RxEventType == HAL_UART_RXEVENT_TC))
+        {
+            /* 中断只记录完整帧长度，不在中断中解析或写 Flash。 */
+            s_rx_size = Size;
+            s_rx_event_type = huart->RxEventType;
+            __DMB();
+            (void)OTA_NotifyFromISR(OTA_EVENT_RX,
+                                    &higher_priority_task_woken);
+            portYIELD_FROM_ISR(higher_priority_task_woken);
+        }
     }
 }
 
@@ -671,6 +761,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 
     if (huart == &huart1)
     {
+        s_uart_error = huart->ErrorCode;
         (void)OTA_NotifyFromISR(OTA_EVENT_ERROR,
                                 &higher_priority_task_woken);
         portYIELD_FROM_ISR(higher_priority_task_woken);
