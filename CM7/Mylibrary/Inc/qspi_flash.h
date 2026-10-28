@@ -85,6 +85,17 @@ HAL_StatusTypeDef QSPI_FLASH_EraseSector4KB(uint32_t address);
  */
 HAL_StatusTypeDef QSPI_FLASH_EraseBlock64KB(uint32_t address);
 
+/**
+ * @brief 从外部 Flash 回读指定区域并计算 CRC32。
+ * @param address 起始地址。
+ * @param size 数据长度，必须大于 0。
+ * @param crc32 输出 CRC32 值。
+ * @return HAL_OK 表示成功，其他值表示地址或读取失败。
+ */
+HAL_StatusTypeDef QSPI_FLASH_CalculateCrc32(uint32_t address,
+                                            uint32_t size,
+                                            uint32_t *crc32);
+
 #ifdef __cplusplus
 }
 #endif

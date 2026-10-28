@@ -31,6 +31,7 @@
 
 #include "bl24c16f.h"
 #include "crc32.h"
+#include "ota_layout.h"
 #include "qspi_flash.h"
 
 /* USER CODE END Includes */
@@ -43,8 +44,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define APP_BASE_ADDRESS  0x08020000U
-#define APP_END_ADDRESS   0x08160000U
+#define APP_BASE_ADDRESS  OTA_INTERNAL_CM7_BASE
+#define APP_END_ADDRESS   (OTA_INTERNAL_CM7_BASE + OTA_INTERNAL_CM7_SIZE)
 #define APP_SRAM_START    0x20000000U
 #define APP_SRAM_END      0x20020000U
 

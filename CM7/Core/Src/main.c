@@ -42,6 +42,7 @@
 #include "oscillograph.h"
 #include "logic_trace.h"
 #include "encoder.h"
+#include "ota_layout.h"
 #include "sd.h"
 #include "uart_printf.h"
 /* USER CODE END Includes */
@@ -102,7 +103,7 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
 
-  SCB->VTOR = 0x08020000U;
+  SCB->VTOR = OTA_INTERNAL_CM7_BASE;
 
   /* USER CODE END 1 */
 /* USER CODE BEGIN Boot_Mode_Sequence_0 */

@@ -1,5 +1,6 @@
 #include "qspi_flash.h"
 
+#include "crc32.h"
 #include "quadspi.h"
 #include "stm32h7xx_hal_def.h"
 
@@ -22,6 +23,9 @@
 #define QSPI_FLASH_COMMAND_TIMEOUT_MS    100U
 #define QSPI_FLASH_WRITE_TIMEOUT_MS      1000U
 #define QSPI_FLASH_ERASE_TIMEOUT_MS      5000U
+#define QSPI_FLASH_CRC_CHUNK_SIZE        1024U
+
+static uint8_t s_crc_buffer[QSPI_FLASH_CRC_CHUNK_SIZE];
 
 /**
  * @brief 配置并发送一条 QSPI 命令。
@@ -362,4 +366,41 @@ HAL_StatusTypeDef QSPI_FLASH_EraseBlock64KB(uint32_t address)
 {
     return qspi_flash_erase(address, QSPI_FLASH_BLOCK_SIZE,
                             QSPI_FLASH_CMD_BLOCK_ERASE);
+}
+
+HAL_StatusTypeDef QSPI_FLASH_CalculateCrc32(uint32_t address,
+                                            uint32_t size,
+                                            uint32_t *crc32)
+{
+    HAL_StatusTypeDef result;
+    uint32_t crc;
+    uint32_t chunk_size;
+
+    if ((crc32 == NULL) || (size == 0U) ||
+        (address >= QSPI_FLASH_SIZE_BYTES) ||
+        (size > (QSPI_FLASH_SIZE_BYTES - address)))
+    {
+        return HAL_ERROR;
+    }
+
+    crc = CRC32_Init();
+    while (size > 0U)
+    {
+        chunk_size = (size > QSPI_FLASH_CRC_CHUNK_SIZE)
+                   ? QSPI_FLASH_CRC_CHUNK_SIZE
+                   : size;
+
+        result = QSPI_FLASH_Read(address, s_crc_buffer, chunk_size);
+        if (result != HAL_OK)
+        {
+            return result;
+        }
+
+        crc = CRC32_Update(crc, s_crc_buffer, chunk_size);
+        address += chunk_size;
+        size -= chunk_size;
+    }
+
+    *crc32 = CRC32_Finalize(crc);
+    return HAL_OK;
 }

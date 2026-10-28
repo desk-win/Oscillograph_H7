@@ -4,15 +4,18 @@
 #include <stdint.h>
 
 #include "stm32h7xx_hal.h"
+#include "ota_layout.h"
 
 /** M7 应用槽起始地址，包含。 */
-#define INTERNAL_FLASH_M7_APP_START  0x08020000U
+#define INTERNAL_FLASH_M7_APP_START  OTA_INTERNAL_CM7_BASE
 /** M7 应用槽结束地址，不包含。 */
-#define INTERNAL_FLASH_M7_APP_END    0x08160000U
+#define INTERNAL_FLASH_M7_APP_END    (OTA_INTERNAL_CM7_BASE + \
+                                      OTA_INTERNAL_CM7_SIZE)
 /** M4 应用槽起始地址，包含。 */
-#define INTERNAL_FLASH_M4_APP_START  0x08180000U
+#define INTERNAL_FLASH_M4_APP_START  OTA_INTERNAL_CM4_BASE
 /** M4 应用槽结束地址，不包含。 */
-#define INTERNAL_FLASH_M4_APP_END    0x08200000U
+#define INTERNAL_FLASH_M4_APP_END    (OTA_INTERNAL_CM4_BASE + \
+                                      OTA_INTERNAL_CM4_SIZE)
 
 /** H7 每个 Flash 扇区的大小，128 KB。 */
 #define INTERNAL_FLASH_SECTOR_SIZE   0x00020000U

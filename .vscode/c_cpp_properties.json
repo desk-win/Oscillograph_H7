@@ -2,10 +2,6 @@
     "configurations": [
         {
             "name": "STM32_BootLoader",
-            "compileCommands": "${workspaceFolder}/BootLoader/CM4/build/compile_commands.json"
-        },
-        {
-            "name": "STM32_BootLoader",
             "compileCommands": "${workspaceFolder}/BootLoader/CM7/build/compile_commands.json"
         },
         {

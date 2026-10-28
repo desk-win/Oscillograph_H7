@@ -1,6 +1,12 @@
 #include "ota.h"
 
+#include <stddef.h>
+#include <string.h>
+
+#include "bl24c16f.h"
 #include "cmsis_os2.h"
+#include "crc32.h"
+#include "ota_layout.h"
 #include "qspi_flash.h"
 #include "usart.h"
 #include "uart_printf.h"
@@ -19,8 +25,11 @@
 #define OTA_DMA_BUFFER_ADDRESS 0x38000000U
 #define OTA_DMA_BUFFER_SIZE    1032U
 
-/* A/B 分区尚未确定，先使用外部 Flash 起始地址作为暂存区。 */
-#define OTA_EXTERNAL_IMAGE_ADDRESS 0x00000000U
+#define OTA_FILE_CM7_MASK  0x01U
+#define OTA_FILE_CM4_MASK  0x02U
+#define OTA_FILES_REQUIRED (OTA_FILE_CM7_MASK | OTA_FILE_CM4_MASK)
+#define OTA_CM7_FILENAME   "M7.bin"
+#define OTA_CM4_FILENAME   "M4.bin"
 
 #define OTA_UART_TIMEOUT_MS        200U
 #define OTA_HANDSHAKE_TIMEOUT_MS   1000U
@@ -39,10 +48,16 @@ typedef enum
     OTA_STATE_IDLE = 0,
     OTA_STATE_WAIT_BLOCK0,
     OTA_STATE_RECEIVING,
-    OTA_STATE_WAIT_FINAL_BLOCK,
     OTA_STATE_DONE,
     OTA_STATE_FAILED
 } OTA_State;
+
+typedef enum
+{
+    OTA_FILE_NONE = 0,
+    OTA_FILE_CM7,
+    OTA_FILE_CM4
+} OTA_File;
 
 typedef enum
 {
@@ -79,6 +94,16 @@ static uint32_t s_image_size;
 static uint32_t s_received_size;
 /** 下一个期望收到的数据块序号。 */
 static uint8_t s_expected_sequence;
+/** 当前文件在外部 Flash 中的起始地址。 */
+static uint32_t s_image_address;
+/** 当前文件接收过程中的 CRC32 中间值。 */
+static uint32_t s_receive_crc;
+/** 本次会话已完整接收并校验的文件位图。 */
+static uint8_t s_received_files;
+/** 当前正在接收的文件。 */
+static OTA_File s_current_file;
+/** 本次写入的 A/B 槽，来自 EEPROM 中最新有效元数据。 */
+static OTA_SlotId s_target_slot = OTA_SLOT_ID_A;
 /** 当前接收阶段，用于失败后定位。 */
 static const char *s_stage = "idle";
 /** 当前阶段内的错误细节。 */
@@ -96,6 +121,81 @@ static volatile uint32_t s_uart_error;
 
 _Static_assert(OTA_DMA_BUFFER_SIZE >= 1029U,
                "OTA DMA buffer must fit one Ymodem frame");
+
+/** 校验 EEPROM 元数据记录，避免把掉电残留记录当成有效槽信息。 */
+static uint8_t OTA_MetadataValid(const OTA_Metadata *metadata)
+{
+    uint32_t record_crc;
+
+    if ((metadata == NULL) ||
+        (metadata->magic != OTA_METADATA_MAGIC) ||
+        (metadata->version != OTA_METADATA_VERSION) ||
+        (metadata->record_size != sizeof(OTA_Metadata)) ||
+        (metadata->active_slot > OTA_SLOT_ID_B))
+    {
+        return 0U;
+    }
+
+    record_crc = CRC32_Calculate((const uint8_t *)metadata,
+                                 (uint32_t)offsetof(OTA_Metadata,
+                                                    record_crc32));
+    return (record_crc == metadata->record_crc32) ? 1U : 0U;
+}
+
+/**
+ * @brief 从 EEPROM 两份元数据中选择最新有效记录，返回其非活动槽。
+ *
+ * 阶段四会提供正式的共享元数据模块；当前无有效记录时默认使用 A 槽，
+ * 这样第一次升级和尚未写入元数据的设备仍可完成阶段二传输。
+ */
+static OTA_SlotId OTA_SelectTargetSlot(void)
+{
+    static const uint16_t copy_offsets[] =
+    {
+        OTA_EEPROM_METADATA_COPY0_OFFSET,
+        OTA_EEPROM_METADATA_COPY1_OFFSET
+    };
+    OTA_Metadata metadata;
+    OTA_Metadata newest;
+    uint8_t newest_valid = 0U;
+
+    if (BL24C16F_Init() != HAL_OK)
+    {
+        OTA_SET_DETAIL("eeprom-init");
+        return OTA_SLOT_ID_A;
+    }
+
+    for (uint32_t i = 0U;
+         i < (sizeof(copy_offsets) / sizeof(copy_offsets[0]));
+         i++)
+    {
+        if ((BL24C16F_Read(copy_offsets[i], (uint8_t *)&metadata,
+                           sizeof(metadata)) == HAL_OK) &&
+            (OTA_MetadataValid(&metadata) != 0U) &&
+            ((newest_valid == 0U) || (metadata.sequence > newest.sequence)))
+        {
+            newest = metadata;
+            newest_valid = 1U;
+        }
+    }
+
+    if ((newest_valid == 0U) ||
+        (newest.active_slot == OTA_SLOT_ID_NONE))
+    {
+        return OTA_SLOT_ID_A;
+    }
+
+    return (newest.active_slot == OTA_SLOT_ID_A)
+         ? OTA_SLOT_ID_B
+         : OTA_SLOT_ID_A;
+}
+
+static uint32_t OTA_SlotBase(OTA_SlotId slot)
+{
+    return (slot == OTA_SLOT_ID_A)
+         ? OTA_EXTERNAL_SLOT_A_BASE
+         : OTA_EXTERNAL_SLOT_B_BASE;
+}
 
 /**
  * @brief 通过 USART1 发送一个 Ymodem 控制字符。
@@ -216,6 +316,44 @@ static uint8_t OTA_ParseFrame(uint16_t size, OTA_Frame *frame)
 }
 
 /**
+ * @brief 从 Ymodem Block 0 的文件名字段识别 CM7 或 CM4 镜像。
+ * @param data Block 0 数据区。
+ * @param size 数据区长度。
+ * @return 识别到的文件类型，未知文件名返回 OTA_FILE_NONE。
+ */
+static OTA_File OTA_ParseFileName(const uint8_t *data, uint16_t size)
+{
+    uint16_t name_length = 0U;
+
+    if ((data == NULL) || (size == 0U))
+    {
+        return OTA_FILE_NONE;
+    }
+
+    while ((name_length < size) && (data[name_length] != 0U))
+    {
+        name_length++;
+    }
+    if (name_length >= size)
+    {
+        return OTA_FILE_NONE;
+    }
+
+    if ((name_length == (sizeof(OTA_CM7_FILENAME) - 1U)) &&
+        (memcmp(data, OTA_CM7_FILENAME, name_length) == 0))
+    {
+        return OTA_FILE_CM7;
+    }
+    if ((name_length == (sizeof(OTA_CM4_FILENAME) - 1U)) &&
+        (memcmp(data, OTA_CM4_FILENAME, name_length) == 0))
+    {
+        return OTA_FILE_CM4;
+    }
+
+    return OTA_FILE_NONE;
+}
+
+/**
  * @brief 从 Ymodem Block 0 中解析文件长度。
  * @param data Block 0 数据区。
  * @param size 数据区长度。
@@ -269,15 +407,58 @@ static uint8_t OTA_ParseImageSize(const uint8_t *data,
     return 1U;
 }
 
+static uint8_t OTA_ParseBlock0(const uint8_t *data,
+                               uint16_t size,
+                               OTA_File *file,
+                               uint32_t *image_size)
+{
+    OTA_File parsed_file;
+
+    if ((file == NULL) || (image_size == NULL))
+    {
+        return 0U;
+    }
+
+    parsed_file = OTA_ParseFileName(data, size);
+    if ((parsed_file == OTA_FILE_NONE) ||
+        (OTA_ParseImageSize(data, size, image_size) == 0U))
+    {
+        return 0U;
+    }
+
+    *file = parsed_file;
+    return 1U;
+}
+
+/** 在进入协议前验证文件名和长度解析器，避免上位机格式固定时静默写错槽。 */
+static uint8_t OTA_Block0ParserSelfTest(void)
+{
+    static const uint8_t cm7_block0[] = "M7.bin\0" "1";
+    static const uint8_t cm4_block0[] = "M4.bin\0" "1";
+    OTA_File file;
+    uint32_t image_size;
+
+    if ((OTA_ParseBlock0(cm7_block0, sizeof(cm7_block0),
+                         &file, &image_size) == 0U) ||
+        (file != OTA_FILE_CM7) || (image_size != 1U))
+    {
+        return 0U;
+    }
+
+    return ((OTA_ParseBlock0(cm4_block0, sizeof(cm4_block0),
+                             &file, &image_size) != 0U) &&
+            (file == OTA_FILE_CM4) && (image_size == 1U)) ? 1U : 0U;
+}
+
 /**
  * @brief 擦除外部 Flash 中存放新固件的区域。
+ * @param address 擦除起始地址。
  * @param image_size 固件长度。
  * @return HAL_OK 表示成功，其他 HAL 状态表示失败。
  */
-static HAL_StatusTypeDef OTA_EraseImage(uint32_t image_size)
+static HAL_StatusTypeDef OTA_EraseImage(uint32_t address, uint32_t image_size)
 {
     HAL_StatusTypeDef status = HAL_OK;
-    uint32_t address = OTA_EXTERNAL_IMAGE_ADDRESS;
     uint32_t remaining = (image_size + 4095U) & ~4095U;
 
     while ((status == HAL_OK) && (remaining >= QSPI_FLASH_BLOCK_SIZE))
@@ -376,10 +557,23 @@ static void OTA_StartSession(void)
     OTA_SET_DETAIL("none");
     s_image_size = 0U;
     s_received_size = 0U;
+    s_image_address = 0U;
+    s_receive_crc = CRC32_Init();
     s_expected_sequence = 1U;
+    s_received_files = 0U;
+    s_current_file = OTA_FILE_NONE;
+    s_target_slot = OTA_SLOT_ID_A;
     s_state = OTA_STATE_WAIT_BLOCK0;
     s_ota_active = 1U;
     s_uart_error = 0U;
+
+    OTA_SET_STAGE("parser-selftest");
+    if (OTA_Block0ParserSelfTest() == 0U)
+    {
+        OTA_SET_DETAIL("block0-parser");
+        OTA_Fail();
+        return;
+    }
 
     OTA_SET_STAGE("qspi-init");
     if (QSPI_FLASH_Init() != HAL_OK)
@@ -388,6 +582,10 @@ static void OTA_StartSession(void)
         OTA_Fail();
         return;
     }
+
+    OTA_SET_STAGE("slot-select");
+    s_target_slot = OTA_SelectTargetSlot();
+
     OTA_SET_STAGE("dma-arm");
     if (!OTA_RearmOrFail())
     {
@@ -405,14 +603,11 @@ static void OTA_StartSession(void)
  */
 static void OTA_HandleBlock0(const OTA_Frame *frame)
 {
-    if ((s_state == OTA_STATE_WAIT_FINAL_BLOCK) &&
-        (frame->data_size > 0U) && (frame->data[0] == 0U))
-    {
-        OTA_SET_STAGE("final-block");
-        OTA_SendByte(OTA_YMODEM_ACK);
-        OTA_Finish(OTA_STATE_DONE);
-        return;
-    }
+    OTA_File file;
+    uint32_t image_size;
+    uint32_t max_size;
+    uint32_t slot_base;
+    uint8_t expected_mask;
 
     if (s_state != OTA_STATE_WAIT_BLOCK0)
     {
@@ -420,20 +615,95 @@ static void OTA_HandleBlock0(const OTA_Frame *frame)
         OTA_Fail();
         return;
     }
-    if (!OTA_ParseImageSize(frame->data, frame->data_size, &s_image_size))
+
+    if ((frame->data == NULL) || (frame->data_size == 0U))
     {
-        OTA_SET_STAGE("block0-parse");
-        OTA_SET_DETAIL("size");
+        OTA_SET_STAGE("block0-empty-data");
         OTA_Fail();
         return;
     }
+
+    if (frame->data[0] == 0U)
+    {
+        if (s_received_files != OTA_FILES_REQUIRED)
+        {
+            OTA_SET_STAGE("block0-incomplete");
+            OTA_Fail();
+            return;
+        }
+
+        OTA_SET_STAGE("final-block");
+        (void)HAL_UART_AbortReceive(&huart1);
+        OTA_SendByte(OTA_YMODEM_ACK);
+        OTA_Finish(OTA_STATE_DONE);
+        return;
+    }
+
+    if (!OTA_ParseBlock0(frame->data, frame->data_size,
+                         &file, &image_size))
+    {
+        OTA_SET_STAGE("block0-parse");
+        OTA_SET_DETAIL("filename-or-size");
+        OTA_Fail();
+        return;
+    }
+
+    expected_mask = (s_received_files == 0U)
+                  ? OTA_FILE_CM7_MASK
+                  : ((s_received_files == OTA_FILE_CM7_MASK)
+                     ? OTA_FILE_CM4_MASK : 0U);
+    if ((expected_mask == 0U) ||
+        (((file == OTA_FILE_CM7) ? OTA_FILE_CM7_MASK
+                                 : OTA_FILE_CM4_MASK) != expected_mask))
+    {
+        OTA_SET_STAGE("block0-file");
+        OTA_SET_DETAIL("M7-then-M4-required");
+        OTA_Fail();
+        return;
+    }
+
+    slot_base = OTA_SlotBase(s_target_slot);
+    if (file == OTA_FILE_CM7)
+    {
+        s_image_address = slot_base + OTA_EXTERNAL_CM7_OFFSET;
+        max_size = OTA_EXTERNAL_CM7_MAX_SIZE;
+    }
+    else
+    {
+        s_image_address = slot_base + OTA_EXTERNAL_CM4_OFFSET;
+        max_size = OTA_EXTERNAL_CM4_MAX_SIZE;
+    }
+    if (image_size > max_size)
+    {
+        OTA_SET_STAGE("block0-size");
+        OTA_SET_DETAIL("image-too-large");
+        OTA_Fail();
+        return;
+    }
+
+    if (s_received_files == 0U)
+    {
+        OTA_SET_STAGE("header-invalidate");
+        if (QSPI_FLASH_EraseSector4KB(slot_base +
+                                      OTA_PACKAGE_HEADER_OFFSET) != HAL_OK)
+        {
+            OTA_SET_DETAIL("qspi-header-erase");
+            OTA_Fail();
+            return;
+        }
+    }
+
+    s_current_file = file;
+    s_image_size = image_size;
+    s_receive_crc = CRC32_Init();
+
     OTA_SET_STAGE("block0-ack");
     (void)HAL_UART_AbortReceive(&huart1);
     (void)xTaskNotifyStateClear(NULL);
     OTA_SendByte(OTA_YMODEM_ACK);
 
     OTA_SET_STAGE("erase");
-    if (OTA_EraseImage(s_image_size) != HAL_OK)
+    if (OTA_EraseImage(s_image_address, s_image_size) != HAL_OK)
     {
         OTA_SET_DETAIL("qspi-erase");
         OTA_Fail();
@@ -501,7 +771,7 @@ static void OTA_HandleData(const OTA_Frame *frame)
                ? remaining
                : frame->data_size;
     OTA_SET_STAGE("qspi-write");
-    if (QSPI_FLASH_Write(OTA_EXTERNAL_IMAGE_ADDRESS + s_received_size,
+    if (QSPI_FLASH_Write(s_image_address + s_received_size,
                          frame->data, write_size) != HAL_OK)
     {
         OTA_SET_DETAIL("qspi-write");
@@ -509,6 +779,7 @@ static void OTA_HandleData(const OTA_Frame *frame)
         return;
     }
 
+    s_receive_crc = CRC32_Update(s_receive_crc, frame->data, write_size);
     s_received_size += write_size;
     s_expected_sequence++;
 
@@ -527,6 +798,9 @@ static void OTA_HandleData(const OTA_Frame *frame)
  */
 static void OTA_HandleEot(void)
 {
+    uint32_t flash_crc;
+    uint32_t received_crc;
+
     if (s_state == OTA_STATE_RECEIVING)
     {
         if (s_received_size != s_image_size)
@@ -536,20 +810,51 @@ static void OTA_HandleEot(void)
             return;
         }
 
-        /* 标准 Ymodem：EOT 后回复 ACK + C，等待结束空 Block 0。 */
-        s_state = OTA_STATE_WAIT_FINAL_BLOCK;
-        OTA_SET_STAGE("eot-ack");
+        received_crc = CRC32_Finalize(s_receive_crc);
+        OTA_SET_STAGE("verify-crc");
+        if ((QSPI_FLASH_CalculateCrc32(s_image_address, s_image_size,
+                                       &flash_crc) != HAL_OK) ||
+            (flash_crc != received_crc))
+        {
+            OTA_SET_DETAIL("qspi-crc");
+            OTA_Fail();
+            return;
+        }
+
+        if (s_current_file == OTA_FILE_CM7)
+        {
+            s_received_files |= OTA_FILE_CM7_MASK;
+        }
+        else if (s_current_file == OTA_FILE_CM4)
+        {
+            s_received_files |= OTA_FILE_CM4_MASK;
+        }
+        else
+        {
+            OTA_SET_STAGE("eot-file");
+            OTA_Fail();
+            return;
+        }
+
+        s_current_file = OTA_FILE_NONE;
+        s_state = OTA_STATE_WAIT_BLOCK0;
+        OTA_SET_STAGE("next-block0");
+        if (!OTA_RearmOrFail())
+        {
+            return;
+        }
+        OTA_SendByte(OTA_YMODEM_ACK);
+        OTA_SendByte(OTA_YMODEM_C);
+    }
+    else if (s_state == OTA_STATE_WAIT_BLOCK0)
+    {
+        /* 上位机未收到 EOT 应答时会重发 EOT，这里重复 ACK + C。 */
+        OTA_SET_STAGE("eot-retry");
         if (OTA_RearmOrFail())
         {
             OTA_SendByte(OTA_YMODEM_ACK);
             OTA_SendByte(OTA_YMODEM_C);
-            OTA_SET_STAGE("wait-final-block");
         }
-    }
-    else if (s_state == OTA_STATE_WAIT_FINAL_BLOCK)
-    {
-        OTA_SET_STAGE("eot-final");
-        OTA_Finish(OTA_STATE_DONE);
     }
 }
 
@@ -576,8 +881,7 @@ static void OTA_ProcessRx(uint16_t size)
     {
     case OTA_FRAME_DATA:
         if ((frame.sequence == 0U) &&
-            ((s_state == OTA_STATE_WAIT_BLOCK0) ||
-             (s_state == OTA_STATE_WAIT_FINAL_BLOCK)))
+            (s_state == OTA_STATE_WAIT_BLOCK0))
         {
             OTA_HandleBlock0(&frame);
         }
@@ -621,8 +925,7 @@ static void OTA_Task(void *argument)
         {
             wait_ticks = pdMS_TO_TICKS(OTA_HANDSHAKE_TIMEOUT_MS);
         }
-        else if ((s_state == OTA_STATE_RECEIVING) ||
-                 (s_state == OTA_STATE_WAIT_FINAL_BLOCK))
+        else if (s_state == OTA_STATE_RECEIVING)
         {
             wait_ticks = pdMS_TO_TICKS(OTA_DATA_TIMEOUT_MS);
         }
@@ -642,11 +945,6 @@ static void OTA_Task(void *argument)
             {
                 OTA_SET_STAGE("data-timeout");
                 OTA_SendByte(OTA_YMODEM_NAK);
-            }
-            else if (s_state == OTA_STATE_WAIT_FINAL_BLOCK)
-            {
-                OTA_SET_STAGE("final-timeout");
-                OTA_Finish(OTA_STATE_DONE);
             }
             continue;
         }

@@ -55,13 +55,14 @@ enable_language(C ASM)
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Common/Inc
 )
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../Common/Src/crc32.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/bl24c16f.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/crc32.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/internal_flash.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/qspi_flash.c
 )
