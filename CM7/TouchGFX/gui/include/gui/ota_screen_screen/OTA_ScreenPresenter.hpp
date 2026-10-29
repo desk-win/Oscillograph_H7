@@ -25,10 +25,14 @@ public:
      */
     virtual void deactivate();
 
+    virtual void otaStatusUpdated(const OTA_Status& status);
+
     virtual ~OTA_ScreenPresenter() {}
 
 private:
     OTA_ScreenPresenter();
+
+    void updateOtaStatus();
 
     OTA_ScreenView& view;
 };

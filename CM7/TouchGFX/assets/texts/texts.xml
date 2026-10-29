@@ -6,8 +6,11 @@
   <Texts>
     <TextGroup Id="Group1" />
     <TextGroup Id="Unsorted">
+      <Text Id="__SingleUse_89HZ" Alignment="Left" TypographyId="Default">
+        <Translation Language="GB">Oscillograph Logic Tool</Translation>
+      </Text>
       <Text Id="__SingleUse_QK9F" Alignment="Left" TypographyId="Default">
-        <Translation Language="GB">OTA_UPDATA</Translation>
+        <Translation Language="GB">&lt;value&gt;</Translation>
       </Text>
       <Text Id="__SingleUse_W9UR" Alignment="Left" TypographyId="Default">
         <Translation Language="GB">&lt;value&gt; %</Translation>

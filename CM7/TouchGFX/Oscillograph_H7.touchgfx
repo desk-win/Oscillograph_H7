@@ -92,11 +92,26 @@
           {
             "Type": "TextArea",
             "Name": "textArea3",
-            "X": 333,
-            "Y": 106,
-            "Width": 134,
+            "X": 30,
+            "Y": 40,
+            "Width": 220,
             "Height": 24,
             "TextId": "__SingleUse_QK9F",
+            "TextRotation": "0",
+            "AutoSize": true,
+            "Wildcard1": {
+              "UseBuffer": true,
+              "BufferSize": 15
+            }
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea4",
+            "X": 288,
+            "Y": 132,
+            "Width": 224,
+            "Height": 24,
+            "TextId": "__SingleUse_89HZ",
             "TextRotation": "0",
             "AutoSize": true
           }

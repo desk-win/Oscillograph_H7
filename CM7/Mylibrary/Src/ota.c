@@ -119,6 +119,9 @@ static const char *s_stage = "idle";
 static const char *s_detail = "none";
 /** 最近一次 UART 错误码。 */
 static volatile uint32_t s_uart_error;
+/** UI 线程读取的 OTA 阶段和总进度。 */
+static volatile uint8_t s_progress_stage = OTA_STAGE_IDLE;
+static volatile uint8_t s_progress_percent;
 
 #if OTA_DEBUG_LOG
 #define OTA_SET_STAGE(value)  (s_stage = (value))
@@ -130,6 +133,27 @@ static volatile uint32_t s_uart_error;
 
 _Static_assert(OTA_DMA_BUFFER_SIZE >= 1029U,
                "OTA DMA buffer must fit one Ymodem frame");
+
+static void OTA_SetProgress(OTA_Stage stage, uint8_t percent)
+{
+    s_progress_stage = (uint8_t)stage;
+    s_progress_percent = (percent > 100U) ? 100U : percent;
+}
+
+static uint8_t OTA_FileProgress(void)
+{
+    uint32_t percent;
+
+    if (s_image_size == 0U)
+    {
+        return 0U;
+    }
+
+    percent = (s_received_size * 49U) / s_image_size;
+    return (s_current_file == OTA_FILE_CM4)
+         ? (uint8_t)(50U + percent)
+         : (uint8_t)percent;
+}
 
 static void OTA_InvalidatePackageHeader(void)
 {
@@ -472,6 +496,20 @@ static void OTA_Finish(OTA_State state)
     (void)HAL_UART_AbortReceive(&huart1);
     s_ota_active = 0U;
     s_state = state;
+
+    if (state == OTA_STATE_DONE)
+    {
+        OTA_SetProgress(OTA_STAGE_DONE, 100U);
+    }
+    else if (state == OTA_STATE_FAILED)
+    {
+        OTA_SetProgress(OTA_STAGE_FAILED, s_progress_percent);
+    }
+    else if (state == OTA_STATE_IDLE)
+    {
+        OTA_SetProgress(OTA_STAGE_IDLE, 0U);
+    }
+
     UART1_PrintfSetEnabled(1U);
 
 #if OTA_DEBUG_LOG
@@ -550,6 +588,7 @@ static void OTA_StartSession(void)
     s_state = OTA_STATE_WAIT_BLOCK0;
     s_ota_active = 1U;
     s_uart_error = 0U;
+    OTA_SetProgress(OTA_STAGE_WAITING_M7, 0U);
 
     OTA_SET_STAGE("parser-selftest");
     if (OTA_Block0ParserSelfTest() == 0U)
@@ -662,6 +701,7 @@ static void OTA_HandleBlock0(const OTA_Frame *frame)
 
         (void)HAL_UART_AbortReceive(&huart1);
 
+        OTA_SetProgress(OTA_STAGE_FINALIZING, 99U);
         OTA_SET_STAGE("package-commit");
         if (OTA_CommitPackage() == 0U)
         {
@@ -748,6 +788,10 @@ static void OTA_HandleBlock0(const OTA_Frame *frame)
     s_current_file = file;
     s_image_size = image_size;
     s_receive_crc = CRC32_Init();
+    OTA_SetProgress((file == OTA_FILE_CM7)
+                    ? OTA_STAGE_RECEIVING_M7
+                    : OTA_STAGE_RECEIVING_M4,
+                    (file == OTA_FILE_CM7) ? 0U : 50U);
 
     OTA_SET_STAGE("block0-ack");
     (void)HAL_UART_AbortReceive(&huart1);
@@ -834,6 +878,10 @@ static void OTA_HandleData(const OTA_Frame *frame)
     s_receive_crc = CRC32_Update(s_receive_crc, frame->data, write_size);
     s_received_size += write_size;
     s_expected_sequence++;
+    OTA_SetProgress((s_current_file == OTA_FILE_CM7)
+                    ? OTA_STAGE_RECEIVING_M7
+                    : OTA_STAGE_RECEIVING_M4,
+                    OTA_FileProgress());
 
     OTA_SET_STAGE("data-ack");
     if (!OTA_RearmOrFail())
@@ -862,6 +910,10 @@ static void OTA_HandleEot(void)
             return;
         }
 
+        OTA_SetProgress((s_current_file == OTA_FILE_CM7)
+                        ? OTA_STAGE_VERIFYING_M7
+                        : OTA_STAGE_VERIFYING_M4,
+                        (s_current_file == OTA_FILE_CM7) ? 50U : 99U);
         received_crc = CRC32_Finalize(s_receive_crc);
         OTA_SET_STAGE("verify-crc");
         if ((QSPI_FLASH_CalculateCrc32(s_image_address, s_image_size,
@@ -894,6 +946,11 @@ static void OTA_HandleEot(void)
 
         s_current_file = OTA_FILE_NONE;
         s_state = OTA_STATE_WAIT_BLOCK0;
+        OTA_SetProgress((s_received_files == OTA_FILE_CM7_MASK)
+                        ? OTA_STAGE_WAITING_M4
+                        : OTA_STAGE_FINALIZING,
+                        (s_received_files == OTA_FILE_CM7_MASK)
+                        ? 50U : 99U);
         OTA_SET_STAGE("next-block0");
         if (!OTA_RearmOrFail())
         {
@@ -1049,6 +1106,7 @@ BaseType_t OTA_RequestStart(void)
 
     /* 先关闭普通日志，确保后续 Ymodem 控制字符不会与调试文本混在一起。 */
     UART1_PrintfSetEnabled(0U);
+    OTA_SetProgress(OTA_STAGE_WAITING_M7, 0U);
     s_ota_active = 1U;
     return xTaskNotify(s_ota_task, OTA_EVENT_START, eSetBits);
 }
@@ -1058,6 +1116,7 @@ void OTA_RequestStop(void)
     /* 先停止 DMA 并恢复日志，任务侧再做状态收尾。 */
     (void)HAL_UART_AbortReceive(&huart1);
     s_ota_active = 0U;
+    OTA_SetProgress(OTA_STAGE_IDLE, 0U);
     UART1_PrintfSetEnabled(1U);
 
     if (s_ota_task != NULL)
@@ -1076,6 +1135,17 @@ BaseType_t OTA_NotifyFromISR(uint32_t events,
 
     return xTaskNotifyFromISR(s_ota_task, events, eSetBits,
                               higher_priority_task_woken);
+}
+
+void OTA_GetStatus(OTA_Status *status)
+{
+    if (status == NULL)
+    {
+        return;
+    }
+
+    status->stage = s_progress_stage;
+    status->percent = s_progress_percent;
 }
 
 /**

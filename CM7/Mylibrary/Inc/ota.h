@@ -19,6 +19,28 @@ extern "C" {
 /** OTA 任务收到停止请求。 */
 #define OTA_EVENT_STOP   (1UL << 3)
 
+/** OTA UI 阶段。 */
+typedef enum
+{
+    OTA_STAGE_IDLE = 0,
+    OTA_STAGE_WAITING_M7,
+    OTA_STAGE_RECEIVING_M7,
+    OTA_STAGE_VERIFYING_M7,
+    OTA_STAGE_WAITING_M4,
+    OTA_STAGE_RECEIVING_M4,
+    OTA_STAGE_VERIFYING_M4,
+    OTA_STAGE_FINALIZING,
+    OTA_STAGE_DONE,
+    OTA_STAGE_FAILED
+} OTA_Stage;
+
+/** UI 线程读取的 OTA 状态快照。 */
+typedef struct
+{
+    uint8_t stage;
+    uint8_t percent;
+} OTA_Status;
+
 /**
  * @brief 创建 OTA 升级任务。
  * @return pdPASS 表示成功，其他值表示创建失败。
@@ -45,6 +67,9 @@ void OTA_RequestStop(void);
  */
 BaseType_t OTA_NotifyFromISR(uint32_t events,
                              BaseType_t *higher_priority_task_woken);
+
+/** @brief 获取当前 OTA 阶段和 0~100 总进度，供 UI 线程读取。 */
+void OTA_GetStatus(OTA_Status *status);
 
 #ifdef __cplusplus
 }

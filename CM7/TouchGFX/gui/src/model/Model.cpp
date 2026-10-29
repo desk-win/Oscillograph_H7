@@ -25,6 +25,9 @@ Model::Model() : modelListener(0), tickDiv(0), logicNcols(0),
                  oscSelected(OSC_TRACE_CH1),
                  logicPubSeq(0u), logicDecodeReq(false)
 {
+    otaLast.stage = OTA_STAGE_IDLE;
+    otaLast.percent = 0U;
+
     /* 编码器的初始状态: 选中 CH1, 两路都是"调时基", 放大倍数都是 X1。
      *
      * 时基档位不在这儿初始化 —— 它存在 oscillograph_trace.c 的 s_tb_idx 里,
@@ -235,6 +238,11 @@ void Model::clearLogicData()
     }
 }
 
+void Model::getOtaStatus(OTA_Status* status) const
+{
+    OTA_GetStatus(status);
+}
+
 void Model::startAcquisition(osc_trace_ch_t ch)
 {
     OSC_Trace_Start(ch);
@@ -390,6 +398,20 @@ void Model::commitOscEdit()
 
 void Model::tick()
 {
+    {
+        OTA_Status ota;
+        OTA_GetStatus(&ota);
+        if ((ota.stage != otaLast.stage) ||
+            (ota.percent != otaLast.percent))
+        {
+            otaLast = ota;
+            if (modelListener != 0)
+            {
+                modelListener->otaStatusUpdated(ota);
+            }
+        }
+    }
+
     /* ---- 编码器 ----
      *
      * 必须**每个 tick 都读**, 不管当前是哪一屏: Encoder_Increment() 是有状态的

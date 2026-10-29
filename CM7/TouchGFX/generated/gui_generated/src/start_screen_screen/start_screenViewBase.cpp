@@ -47,11 +47,20 @@ start_screenViewBase::start_screenViewBase() :
     otabutton.setAction(buttonCallback);
     add(otabutton);
 
-    textArea3.setXY(333, 106);
+    textArea3.setXY(30, 40);
     textArea3.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
     textArea3.setLinespacing(0);
+    textArea3Buffer[0] = 0;
+    textArea3.setWildcard(textArea3Buffer);
+    textArea3.resizeToCurrentText();
     textArea3.setTypedText(touchgfx::TypedText(T___SINGLEUSE_QK9F));
     add(textArea3);
+
+    textArea4.setXY(288, 132);
+    textArea4.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
+    textArea4.setLinespacing(0);
+    textArea4.setTypedText(touchgfx::TypedText(T___SINGLEUSE_89HZ));
+    add(textArea4);
 }
 
 start_screenViewBase::~start_screenViewBase()

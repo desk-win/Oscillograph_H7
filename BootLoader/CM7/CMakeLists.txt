@@ -65,6 +65,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Common/Src/ota_metadata.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../Common/Src/ota_package.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/bl24c16f.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/boot_options.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/boot_ota.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/internal_flash.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/qspi_flash.c

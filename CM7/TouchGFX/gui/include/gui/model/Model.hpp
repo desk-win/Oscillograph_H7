@@ -5,6 +5,7 @@
 #include <oscillograph_trace.h>
 #include <logic_trace.h>
 #include <logic_analyze.h>
+#include "ota.h"
 
 class ModelListener;
 
@@ -196,6 +197,9 @@ public:
      */
     void clearLogicData();
 
+    /** @brief 取 OTA 阶段和总进度快照。 */
+    void getOtaStatus(OTA_Status* status) const;
+
     /**
      * Save 按键: 请求把这一次采集的跳变表存到 SD 卡上。
      *
@@ -330,6 +334,9 @@ public:
 
 protected:
     ModelListener* modelListener;
+
+    /** 上一帧 OTA 状态，用于只在变化时通知 View。 */
+    OTA_Status otaLast;
 
     /* 两片一屏波形。Model 活得和程序一样久 (它住在 FrontendHeap 的静态实例
      * 里), 所以放这儿不占栈 —— 两片一共 4 KB, 放栈上会很难受。 */

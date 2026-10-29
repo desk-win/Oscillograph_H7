@@ -125,13 +125,10 @@ int main(void)
 
 /* USER CODE BEGIN Boot_Mode_Sequence_1 */
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
-  /* Wait until CPU2 boots and enters in stop mode or timeout*/
-  timeout = 0xFFFF;
-  while((__HAL_RCC_GET_FLAG(RCC_FLAG_D2CKRDY) != RESET) && (timeout-- > 0));
-  if ( timeout < 0 )
-  {
-  Error_Handler();
-  }
+  /*
+   * BCM4 已改为 Disable，此时 CM4 还没有启动。
+   * 不能再沿用 BCM4=1 时“等待 CM4 自己进入 STOP”的旧流程。
+   */
 #endif /* DUAL_CORE_BOOT_SYNC_SEQUENCE */
 /* USER CODE END Boot_Mode_Sequence_1 */
   /* MCU Configuration--------------------------------------------------------*/
@@ -156,6 +153,10 @@ HSEM notification */
 __HAL_RCC_HSEM_CLK_ENABLE();
 /*Take HSEM */
 HAL_HSEM_FastTake(HSEM_ID_0);
+/* 阶段六将 BCM4 改为 Disable，CM4 由 CM7 在这里显式启动。 */
+HAL_RCCEx_EnableBootCore(RCC_BOOT_C2);
+/* 给 CM4 时间完成启动并挂起 HSEM0 通知，避免释放通知过早丢失。 */
+HAL_Delay(2U);
 /*Release HSEM in order to notify the CPU2(CM4)*/
 HAL_HSEM_Release(HSEM_ID_0,0);
 /* wait until CPU2 wakes up from stop mode */

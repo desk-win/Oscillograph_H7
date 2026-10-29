@@ -11,9 +11,22 @@ OTA_ScreenPresenter::OTA_ScreenPresenter(OTA_ScreenView& v)
 void OTA_ScreenPresenter::activate()
 {
     (void)OTA_RequestStart();
+    updateOtaStatus();
 }
 
 void OTA_ScreenPresenter::deactivate()
 {
     OTA_RequestStop();
+}
+
+void OTA_ScreenPresenter::otaStatusUpdated(const OTA_Status& status)
+{
+    view.updateStatus(status);
+}
+
+void OTA_ScreenPresenter::updateOtaStatus()
+{
+    OTA_Status status;
+    model->getOtaStatus(&status);
+    view.updateStatus(status);
 }

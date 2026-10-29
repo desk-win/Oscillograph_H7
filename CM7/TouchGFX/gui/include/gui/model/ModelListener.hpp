@@ -86,6 +86,12 @@ public:
         (void)count;
     }
 
+    /** OTA 进度发生变化时通知当前页面。 */
+    virtual void otaStatusUpdated(const OTA_Status& status)
+    {
+        (void)status;
+    }
+
     /**
      * 编码器转过了。delta 是自上次调用以来的**净格数**, 正 = 顺时针。
      *

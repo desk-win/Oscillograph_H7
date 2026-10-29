@@ -30,9 +30,11 @@
 /* USER CODE BEGIN Includes */
 
 #include "bl24c16f.h"
+#include "boot_options.h"
 #include "boot_ota.h"
 #include "crc32.h"
 #include "ota_layout.h"
+#include "ota_metadata.h"
 #include "qspi_flash.h"
 
 /* USER CODE END Includes */
@@ -69,6 +71,7 @@ static void MPU_Config(void);
 /* USER CODE BEGIN PFP */
 
 static void BootLoader_Printf(const char *format, ...);
+static uint8_t BootLoader_ApplicationValid(void);
 static void BootLoader_JumpToApplication(void);
 
 /* USER CODE END PFP */
@@ -98,17 +101,25 @@ static void BootLoader_Printf(const char *format, ...)
   }
 }
 
+static uint8_t BootLoader_ApplicationValid(void)
+{
+  uint32_t app_stack = *(volatile uint32_t *)APP_BASE_ADDRESS;
+  uint32_t app_reset = *(volatile uint32_t *)(APP_BASE_ADDRESS + 4U);
+
+  return ((app_stack >= APP_SRAM_START) &&
+          (app_stack <= APP_SRAM_END) &&
+          ((app_stack & 0x7U) == 0U) &&
+          (app_reset >= APP_BASE_ADDRESS) &&
+          (app_reset < APP_END_ADDRESS) &&
+          ((app_reset & 0x1U) != 0U)) ? 1U : 0U;
+}
+
 static void BootLoader_JumpToApplication(void)
 {
   uint32_t app_stack = *(volatile uint32_t *)APP_BASE_ADDRESS;
   uint32_t app_reset = *(volatile uint32_t *)(APP_BASE_ADDRESS + 4U);
 
-  if ((app_stack < APP_SRAM_START) ||
-      (app_stack > APP_SRAM_END) ||
-      ((app_stack & 0x7U) != 0U) ||
-      (app_reset < APP_BASE_ADDRESS) ||
-      (app_reset >= APP_END_ADDRESS) ||
-      ((app_reset & 0x1U) == 0U))
+  if (BootLoader_ApplicationValid() == 0U)
   {
     while (1)
     {
@@ -178,6 +189,88 @@ int main(void)
   MX_QUADSPI_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  {
+    BootOptions_CM4Info cm4_options = {0};
+    BootOptions_Result options_result;
+
+    if (BootLoader_ApplicationValid() == 0U)
+    {
+      BootLoader_Printf("[BL] skip BCM4 update: CM7 application invalid\r\n");
+      options_result = BOOT_OPTIONS_ALREADY_DISABLED;
+    }
+    else
+    {
+      if (BootOptions_GetCM4Info(&cm4_options) != HAL_OK)
+      {
+        BootLoader_Printf("[BL] read CM4 options FAILED\r\n");
+        while (1)
+        {
+        }
+      }
+
+      BootLoader_Printf("[BL] CM4 boot: BCM4=%u, addr=0x%08lX\r\n",
+                        (unsigned int)cm4_options.bcm4_enabled,
+                        (unsigned long)cm4_options.cm4_boot_addr0);
+
+      /*
+       * 首次从 BCM4=1 迁移到 0 时，旧 VALID 包可能不含阶段六启动代码。
+       * 将其改回 PENDING，防止新 BootLoader 自动安装旧包或覆盖新应用。
+       */
+      if (cm4_options.bcm4_enabled != 0U)
+      {
+        OTA_Metadata metadata;
+        uint8_t found = 0U;
+
+        if (OTA_Metadata_Load(&metadata, &found) != HAL_OK)
+        {
+          BootLoader_Printf("[BL] migration metadata load FAILED\r\n");
+          while (1)
+          {
+          }
+        }
+        if ((found != 0U) &&
+            (metadata.pending_state == OTA_SLOT_STATE_VALID))
+        {
+          metadata.pending_state = OTA_SLOT_STATE_PENDING;
+          metadata.confirmed = 0U;
+          metadata.boot_attempts = 0U;
+          if (OTA_Metadata_Commit(&metadata) != HAL_OK)
+          {
+            BootLoader_Printf("[BL] migration metadata commit FAILED\r\n");
+            while (1)
+            {
+            }
+          }
+          BootLoader_Printf("[BL] old VALID package changed to PENDING\r\n");
+        }
+      }
+
+      options_result = BootOptions_EnsureCM4Held(&cm4_options);
+    }
+
+    if (options_result == BOOT_OPTIONS_PROGRAMMED)
+    {
+      BootLoader_Printf("[BL] BCM4 disabled, reset to apply\r\n");
+      HAL_Delay(20U);
+      NVIC_SystemReset();
+    }
+    else if (options_result == BOOT_OPTIONS_BAD_ADDRESS)
+    {
+      BootLoader_Printf("[BL] CM4 boot address invalid, stay in bootloader\r\n");
+      while (1)
+      {
+      }
+    }
+    else if (options_result == BOOT_OPTIONS_ERROR)
+    {
+      BootLoader_Printf("[BL] BCM4 update FAILED, status=%d\r\n",
+                        (int)BootOptions_LastStatus());
+      while (1)
+      {
+      }
+    }
+  }
 
   BootLoader_Printf("[BL] CRC32 self-test: %s\r\n",
                     (CRC32_SelfTest() == HAL_OK) ? "OK" : "FAILED");

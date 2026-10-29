@@ -11,6 +11,7 @@
 #include <touchgfx/widgets/Button.hpp>
 #include <touchgfx/widgets/TextArea.hpp>
 #include <touchgfx/widgets/ButtonWithLabel.hpp>
+#include <touchgfx/widgets/TextAreaWithWildcard.hpp>
 
 class start_screenViewBase : public touchgfx::View<start_screenPresenter>
 {
@@ -34,7 +35,14 @@ protected:
     touchgfx::TextArea textArea1;
     touchgfx::TextArea textArea2;
     touchgfx::ButtonWithLabel otabutton;
-    touchgfx::TextArea textArea3;
+    touchgfx::TextAreaWithOneWildcard textArea3;
+    touchgfx::TextArea textArea4;
+
+    /*
+     * Wildcard Buffers
+     */
+    static const uint16_t TEXTAREA3_SIZE = 15;
+    touchgfx::Unicode::UnicodeChar textArea3Buffer[TEXTAREA3_SIZE];
 
 private:
 
