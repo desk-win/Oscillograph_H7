@@ -134,6 +134,8 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     ${CMAKE_CURRENT_SOURCE_DIR}/../Common/Src/crc32.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Common/Src/ota_metadata.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Common/Src/ota_package.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/mylcd.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/touch.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Mylibrary/Src/uart_printf.c

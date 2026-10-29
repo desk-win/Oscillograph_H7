@@ -19,7 +19,7 @@
     (FLASH_FLAG_ALL_ERRORS_BANK2 & 0x7FFFFFFFU)
 
 #define INTERNAL_FLASH_CRC_CHUNK_SIZE      1024U
-#define INTERNAL_FLASH_ERASE_TIMEOUT_MS    5000U
+#define INTERNAL_FLASH_ERASE_TIMEOUT_MS    20000U
 #define INTERNAL_FLASH_PROGRAM_TIMEOUT_MS  1000U
 #define INTERNAL_FLASH_READY_TIMEOUT_MS    100U
 
@@ -35,6 +35,14 @@ static uint32_t s_flash_word[INTERNAL_FLASH_WORD_SIZE / sizeof(uint32_t)]
 static uint32_t s_qspi_word[INTERNAL_FLASH_WORD_SIZE / sizeof(uint32_t)]
     __attribute__((aligned(INTERNAL_FLASH_WORD_SIZE)));
 static uint8_t s_crc_buffer[INTERNAL_FLASH_CRC_CHUNK_SIZE];
+static uint32_t s_last_error_bank;
+static uint32_t s_last_error_flags;
+
+static void InternalFlash_ClearLastError(void)
+{
+    s_last_error_bank = 0U;
+    s_last_error_flags = 0U;
+}
 
 INTERNAL_FLASH_INLINE uint32_t InternalFlash_Bank(uint32_t address)
 {
@@ -102,26 +110,49 @@ InternalFlash_WaitReady(uint32_t bank, uint32_t timeout_ms)
 {
     uint32_t last;
     uint32_t now;
-    uint32_t elapsed_ms = 0U;
+    uint32_t load;
+    uint32_t cycles_per_ms;
+    uint64_t elapsed_cycles = 0U;
+    uint64_t timeout_cycles;
     uint32_t status;
 
-    if ((bank == 0U) || (SysTick->LOAD == 0U))
+    if ((bank == 0U) || (SysTick->LOAD == 0U) ||
+        (SystemCoreClock == 0U))
     {
+        s_last_error_bank = bank;
+        s_last_error_flags = 0x80000000U;
         return HAL_ERROR;
     }
 
+    /*
+     * SysTick 在 HAL_Init() 时配置，随后系统时钟切到 120 MHz。
+     * 按实际 SysTick 周期累计，不能再把一次回绕直接当成 1 ms。
+     */
+    load = SysTick->LOAD + 1U;
+    cycles_per_ms = SystemCoreClock / 1000U;
+    if (cycles_per_ms == 0U)
+    {
+        return HAL_ERROR;
+    }
+    timeout_cycles = (uint64_t)timeout_ms * cycles_per_ms;
     last = SysTick->VAL;
     while ((InternalFlash_Status(bank) & FLASH_SR_QW) != 0U)
     {
         now = SysTick->VAL;
         if (now <= last)
         {
-            elapsed_ms++;
+            elapsed_cycles += last - now;
+        }
+        else
+        {
+            elapsed_cycles += (uint64_t)last + load - now;
         }
         last = now;
 
-        if (elapsed_ms >= timeout_ms)
+        if (elapsed_cycles >= timeout_cycles)
         {
+            s_last_error_bank = bank;
+            s_last_error_flags = 0x80000000U;
             return HAL_TIMEOUT;
         }
     }
@@ -130,6 +161,10 @@ InternalFlash_WaitReady(uint32_t bank, uint32_t timeout_ms)
     if ((status & ((bank == FLASH_BANK_1) ? INTERNAL_FLASH_ERRORS_BANK1
                                           : INTERNAL_FLASH_ERRORS_BANK2)) != 0U)
     {
+        s_last_error_bank = bank;
+        s_last_error_flags = status &
+            ((bank == FLASH_BANK_1) ? INTERNAL_FLASH_ERRORS_BANK1
+                                    : INTERNAL_FLASH_ERRORS_BANK2);
         InternalFlash_ClearFlags(bank);
         return HAL_ERROR;
     }
@@ -268,6 +303,7 @@ HAL_StatusTypeDef InternalFlash_EraseRange(uint32_t address, uint32_t size)
     HAL_StatusTypeDef status;
     uint32_t primask;
 
+    InternalFlash_ClearLastError();
     if ((size == 0U) ||
         ((address % INTERNAL_FLASH_SECTOR_SIZE) != 0U) ||
         ((size % INTERNAL_FLASH_SECTOR_SIZE) != 0U) ||
@@ -304,6 +340,7 @@ HAL_StatusTypeDef InternalFlash_Write(uint32_t address,
     HAL_StatusTypeDef status;
     uint32_t primask;
 
+    InternalFlash_ClearLastError();
     if ((data == NULL) ||
         ((address % INTERNAL_FLASH_WORD_SIZE) != 0U) ||
         (InternalFlash_IsAllowedRange(address, size) == 0U))
@@ -337,6 +374,7 @@ HAL_StatusTypeDef InternalFlash_CopyFromQspi(uint32_t qspi_address,
     uint32_t primask;
     uint32_t chunk_size;
 
+    InternalFlash_ClearLastError();
     if ((size == 0U) ||
         ((internal_address % INTERNAL_FLASH_WORD_SIZE) != 0U) ||
         (InternalFlash_IsAllowedRange(internal_address, size) == 0U))
@@ -384,6 +422,7 @@ HAL_StatusTypeDef InternalFlash_CalculateCrc32(uint32_t address,
     uint32_t crc;
     uint32_t chunk_size;
 
+    InternalFlash_ClearLastError();
     if ((crc32 == NULL) || (InternalFlash_IsAllowedRange(address, size) == 0U))
     {
         return HAL_ERROR;
@@ -421,4 +460,16 @@ HAL_StatusTypeDef InternalFlash_VerifyCrc32(uint32_t address,
     }
 
     return (actual_crc32 == expected_crc32) ? HAL_OK : HAL_ERROR;
+}
+
+void InternalFlash_GetLastError(uint32_t *bank, uint32_t *flags)
+{
+    if (bank != NULL)
+    {
+        *bank = s_last_error_bank;
+    }
+    if (flags != NULL)
+    {
+        *flags = s_last_error_flags;
+    }
 }

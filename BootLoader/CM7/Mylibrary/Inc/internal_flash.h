@@ -80,4 +80,7 @@ HAL_StatusTypeDef InternalFlash_VerifyCrc32(uint32_t address,
                                             uint32_t size,
                                             uint32_t expected_crc32);
 
+/** @brief 获取最近一次内部 Flash 操作失败的 bank 和状态错误位。 */
+void InternalFlash_GetLastError(uint32_t *bank, uint32_t *flags);
+
 #endif /* INTERNAL_FLASH_H */

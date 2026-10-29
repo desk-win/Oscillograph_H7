@@ -30,6 +30,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "bl24c16f.h"
+#include "boot_ota.h"
 #include "crc32.h"
 #include "ota_layout.h"
 #include "qspi_flash.h"
@@ -248,6 +249,41 @@ int main(void)
     else
     {
       BootLoader_Printf("[EEPROM] not found on I2C4\r\n");
+    }
+  }
+
+  /* 启动时先处理 VALID 升级包；安装失败则停留 BootLoader。 */
+  {
+    BootOTA_Result ota_result = BootOTA_Process();
+
+    if (ota_result == BOOT_OTA_INSTALLED)
+    {
+      BootLoader_Printf("[BL] OTA install OK, reset to boot new images\r\n");
+      HAL_Delay(20U);
+      NVIC_SystemReset();
+    }
+    else if (ota_result == BOOT_OTA_PACKAGE_INVALID)
+    {
+      BootLoader_Printf("[BL] OTA package invalid (%s, status=%d), boot old application\r\n",
+                        BootOTA_LastError(), (int)BootOTA_LastStatus());
+    }
+    else if (ota_result == BOOT_OTA_FAILED)
+    {
+      uint32_t flash_bank = 0U;
+      uint32_t flash_flags = 0U;
+
+      BootOTA_LastFlashError(&flash_bank, &flash_flags);
+      BootLoader_Printf("[BL] OTA install FAILED (%s, status=%d, bank=%lu, flags=0x%08lX)\r\n",
+                        BootOTA_LastError(), (int)BootOTA_LastStatus(),
+                        (unsigned long)flash_bank,
+                        (unsigned long)flash_flags);
+      while (1)
+      {
+      }
+    }
+    else
+    {
+      BootLoader_Printf("[BL] no pending OTA package\r\n");
     }
   }
 

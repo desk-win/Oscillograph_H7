@@ -3,10 +3,11 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "bl24c16f.h"
 #include "cmsis_os2.h"
 #include "crc32.h"
 #include "ota_layout.h"
+#include "ota_metadata.h"
+#include "ota_package.h"
 #include "qspi_flash.h"
 #include "usart.h"
 #include "uart_printf.h"
@@ -104,6 +105,14 @@ static uint8_t s_received_files;
 static OTA_File s_current_file;
 /** 本次写入的 A/B 槽，来自 EEPROM 中最新有效元数据。 */
 static OTA_SlotId s_target_slot = OTA_SLOT_ID_A;
+/** 本次 OTA 会话对应的最新元数据记录。 */
+static OTA_Metadata s_metadata;
+/** CM7 镜像最终长度和回读 CRC32，供包头提交使用。 */
+static uint32_t s_cm7_size;
+static uint32_t s_cm7_crc32;
+/** CM4 镜像最终长度和回读 CRC32，供包头提交使用。 */
+static uint32_t s_cm4_size;
+static uint32_t s_cm4_crc32;
 /** 当前接收阶段，用于失败后定位。 */
 static const char *s_stage = "idle";
 /** 当前阶段内的错误细节。 */
@@ -122,79 +131,47 @@ static volatile uint32_t s_uart_error;
 _Static_assert(OTA_DMA_BUFFER_SIZE >= 1029U,
                "OTA DMA buffer must fit one Ymodem frame");
 
-/** 校验 EEPROM 元数据记录，避免把掉电残留记录当成有效槽信息。 */
-static uint8_t OTA_MetadataValid(const OTA_Metadata *metadata)
+static void OTA_InvalidatePackageHeader(void)
 {
-    uint32_t record_crc;
+    (void)OTA_Package_InvalidateSlot(s_target_slot);
+}
 
-    if ((metadata == NULL) ||
-        (metadata->magic != OTA_METADATA_MAGIC) ||
-        (metadata->version != OTA_METADATA_VERSION) ||
-        (metadata->record_size != sizeof(OTA_Metadata)) ||
-        (metadata->active_slot > OTA_SLOT_ID_B))
+/**
+ * @brief 最后写入包头，并回读包头和两个镜像验证最终外部 Flash 内容。
+ */
+static uint8_t OTA_CommitPackage(void)
+{
+    OTA_PackageHeader header = {0};
+    OTA_PackageHeader readback;
+    uint32_t slot_base = OTA_Package_SlotBase(s_target_slot);
+
+    header.magic = OTA_PACKAGE_MAGIC;
+    header.version = OTA_PACKAGE_VERSION;
+    header.header_size = sizeof(header);
+    header.slot = s_target_slot;
+    header.cm7_offset = OTA_EXTERNAL_CM7_OFFSET;
+    header.cm7_size = s_cm7_size;
+    header.cm7_crc32 = s_cm7_crc32;
+    header.cm4_offset = OTA_EXTERNAL_CM4_OFFSET;
+    header.cm4_size = s_cm4_size;
+    header.cm4_crc32 = s_cm4_crc32;
+    header.header_crc32 = OTA_Package_HeaderCrc32(&header);
+
+    OTA_SET_STAGE("header-write");
+    if (QSPI_FLASH_Write(slot_base + OTA_PACKAGE_HEADER_OFFSET,
+                         (const uint8_t *)&header,
+                         sizeof(header)) != HAL_OK)
     {
         return 0U;
     }
 
-    record_crc = CRC32_Calculate((const uint8_t *)metadata,
-                                 (uint32_t)offsetof(OTA_Metadata,
-                                                    record_crc32));
-    return (record_crc == metadata->record_crc32) ? 1U : 0U;
-}
-
-/**
- * @brief 从 EEPROM 两份元数据中选择最新有效记录，返回其非活动槽。
- *
- * 阶段四会提供正式的共享元数据模块；当前无有效记录时默认使用 A 槽，
- * 这样第一次升级和尚未写入元数据的设备仍可完成阶段二传输。
- */
-static OTA_SlotId OTA_SelectTargetSlot(void)
-{
-    static const uint16_t copy_offsets[] =
+    OTA_SET_STAGE("package-verify");
+    if (OTA_Package_VerifySlot(s_target_slot, &readback) != HAL_OK)
     {
-        OTA_EEPROM_METADATA_COPY0_OFFSET,
-        OTA_EEPROM_METADATA_COPY1_OFFSET
-    };
-    OTA_Metadata metadata;
-    OTA_Metadata newest;
-    uint8_t newest_valid = 0U;
-
-    if (BL24C16F_Init() != HAL_OK)
-    {
-        OTA_SET_DETAIL("eeprom-init");
-        return OTA_SLOT_ID_A;
+        return 0U;
     }
 
-    for (uint32_t i = 0U;
-         i < (sizeof(copy_offsets) / sizeof(copy_offsets[0]));
-         i++)
-    {
-        if ((BL24C16F_Read(copy_offsets[i], (uint8_t *)&metadata,
-                           sizeof(metadata)) == HAL_OK) &&
-            (OTA_MetadataValid(&metadata) != 0U) &&
-            ((newest_valid == 0U) || (metadata.sequence > newest.sequence)))
-        {
-            newest = metadata;
-            newest_valid = 1U;
-        }
-    }
-
-    if ((newest_valid == 0U) ||
-        (newest.active_slot == OTA_SLOT_ID_NONE))
-    {
-        return OTA_SLOT_ID_A;
-    }
-
-    return (newest.active_slot == OTA_SLOT_ID_A)
-         ? OTA_SLOT_ID_B
-         : OTA_SLOT_ID_A;
-}
-
-static uint32_t OTA_SlotBase(OTA_SlotId slot)
-{
-    return (slot == OTA_SLOT_ID_A)
-         ? OTA_EXTERNAL_SLOT_A_BASE
-         : OTA_EXTERNAL_SLOT_B_BASE;
+    return 1U;
 }
 
 /**
@@ -553,6 +530,8 @@ static uint8_t OTA_RearmOrFail(void)
  */
 static void OTA_StartSession(void)
 {
+    uint8_t metadata_found = 0U;
+
     OTA_SET_STAGE("init");
     OTA_SET_DETAIL("none");
     s_image_size = 0U;
@@ -563,6 +542,11 @@ static void OTA_StartSession(void)
     s_received_files = 0U;
     s_current_file = OTA_FILE_NONE;
     s_target_slot = OTA_SLOT_ID_A;
+    memset(&s_metadata, 0, sizeof(s_metadata));
+    s_cm7_size = 0U;
+    s_cm7_crc32 = 0U;
+    s_cm4_size = 0U;
+    s_cm4_crc32 = 0U;
     s_state = OTA_STATE_WAIT_BLOCK0;
     s_ota_active = 1U;
     s_uart_error = 0U;
@@ -575,6 +559,40 @@ static void OTA_StartSession(void)
         return;
     }
 
+    OTA_SET_STAGE("package-selftest");
+    if (OTA_Package_SelfTest() != HAL_OK)
+    {
+        OTA_SET_DETAIL("package-header");
+        OTA_Fail();
+        return;
+    }
+
+    OTA_SET_STAGE("metadata-selftest");
+    if (OTA_Metadata_SelfTest() != HAL_OK)
+    {
+        OTA_SET_DETAIL("metadata");
+        OTA_Fail();
+        return;
+    }
+
+    OTA_SET_STAGE("metadata-load");
+    if (OTA_Metadata_Load(&s_metadata, &metadata_found) != HAL_OK)
+    {
+        OTA_SET_DETAIL("metadata-load");
+        OTA_Fail();
+        return;
+    }
+
+    OTA_SET_STAGE("slot-select");
+    s_target_slot = OTA_Metadata_SelectTargetSlot(&s_metadata,
+                                                  metadata_found);
+    if (s_target_slot == OTA_SLOT_ID_NONE)
+    {
+        OTA_SET_DETAIL("metadata-valid");
+        OTA_Fail();
+        return;
+    }
+
     OTA_SET_STAGE("qspi-init");
     if (QSPI_FLASH_Init() != HAL_OK)
     {
@@ -583,8 +601,18 @@ static void OTA_StartSession(void)
         return;
     }
 
-    OTA_SET_STAGE("slot-select");
-    s_target_slot = OTA_SelectTargetSlot();
+    s_metadata.pending_slot = s_target_slot;
+    s_metadata.pending_state = OTA_SLOT_STATE_PENDING;
+    s_metadata.confirmed = 0U;
+    s_metadata.boot_attempts = 0U;
+
+    OTA_SET_STAGE("metadata-pending");
+    if (OTA_Metadata_Commit(&s_metadata) != HAL_OK)
+    {
+        OTA_SET_DETAIL("metadata-pending");
+        OTA_Fail();
+        return;
+    }
 
     OTA_SET_STAGE("dma-arm");
     if (!OTA_RearmOrFail())
@@ -632,8 +660,32 @@ static void OTA_HandleBlock0(const OTA_Frame *frame)
             return;
         }
 
-        OTA_SET_STAGE("final-block");
         (void)HAL_UART_AbortReceive(&huart1);
+
+        OTA_SET_STAGE("package-commit");
+        if (OTA_CommitPackage() == 0U)
+        {
+            OTA_SET_DETAIL("package-verify");
+            OTA_InvalidatePackageHeader();
+            OTA_Fail();
+            return;
+        }
+
+        s_metadata.pending_slot = s_target_slot;
+        s_metadata.pending_state = OTA_SLOT_STATE_VALID;
+        s_metadata.confirmed = 0U;
+        s_metadata.boot_attempts = 0U;
+
+        OTA_SET_STAGE("metadata-valid");
+        if (OTA_Metadata_Commit(&s_metadata) != HAL_OK)
+        {
+            OTA_SET_DETAIL("metadata-valid");
+            OTA_InvalidatePackageHeader();
+            OTA_Fail();
+            return;
+        }
+
+        OTA_SET_STAGE("final-block");
         OTA_SendByte(OTA_YMODEM_ACK);
         OTA_Finish(OTA_STATE_DONE);
         return;
@@ -662,7 +714,7 @@ static void OTA_HandleBlock0(const OTA_Frame *frame)
         return;
     }
 
-    slot_base = OTA_SlotBase(s_target_slot);
+    slot_base = OTA_Package_SlotBase(s_target_slot);
     if (file == OTA_FILE_CM7)
     {
         s_image_address = slot_base + OTA_EXTERNAL_CM7_OFFSET;
@@ -823,10 +875,14 @@ static void OTA_HandleEot(void)
 
         if (s_current_file == OTA_FILE_CM7)
         {
+            s_cm7_size = s_image_size;
+            s_cm7_crc32 = flash_crc;
             s_received_files |= OTA_FILE_CM7_MASK;
         }
         else if (s_current_file == OTA_FILE_CM4)
         {
+            s_cm4_size = s_image_size;
+            s_cm4_crc32 = flash_crc;
             s_received_files |= OTA_FILE_CM4_MASK;
         }
         else

@@ -39,7 +39,8 @@ uint8_t BL24C16F_GetAddress(void);
 
 /**
  * @brief 从 EEPROM 指定地址读取数据。
- * @param address EEPROM 内部 8 位地址。
+ * @param address EEPROM 内部 11 位字节地址，范围 0~2047。
+ *                高 3 位会自动映射到 I2C 从机地址 0x50~0x57。
  * @param data 接收数据的缓冲区。
  * @param size 要读取的字节数。
  * @return HAL_OK 表示成功，其他 HAL 状态表示失败。
@@ -48,7 +49,8 @@ HAL_StatusTypeDef BL24C16F_Read(uint16_t address, uint8_t *data, uint16_t size);
 
 /**
  * @brief 向 EEPROM 指定地址写入数据。
- * @param address EEPROM 内部 8 位起始地址。
+ * @param address EEPROM 内部 11 位起始地址，范围 0~2047。
+ *                高 3 位会自动映射到 I2C 从机地址 0x50~0x57。
  * @param data 待写入数据缓冲区。
  * @param size 要写入的字节数。
  * @return HAL_OK 表示成功，其他 HAL 状态表示失败。

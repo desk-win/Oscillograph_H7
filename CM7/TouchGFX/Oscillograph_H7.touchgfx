@@ -88,6 +88,17 @@
               "Blue": 255
             },
             "TextRotation": "0"
+          },
+          {
+            "Type": "TextArea",
+            "Name": "textArea3",
+            "X": 333,
+            "Y": 106,
+            "Width": 134,
+            "Height": 24,
+            "TextId": "__SingleUse_QK9F",
+            "TextRotation": "0",
+            "AutoSize": true
           }
         ],
         "Interactions": [

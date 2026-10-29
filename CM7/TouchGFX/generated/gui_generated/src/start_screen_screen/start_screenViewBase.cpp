@@ -46,6 +46,12 @@ start_screenViewBase::start_screenViewBase() :
     otabutton.setLabelColorPressed(touchgfx::Color::getColorFromRGB(255, 255, 255));
     otabutton.setAction(buttonCallback);
     add(otabutton);
+
+    textArea3.setXY(333, 106);
+    textArea3.setColor(touchgfx::Color::getColorFromRGB(0, 0, 0));
+    textArea3.setLinespacing(0);
+    textArea3.setTypedText(touchgfx::TypedText(T___SINGLEUSE_QK9F));
+    add(textArea3);
 }
 
 start_screenViewBase::~start_screenViewBase()

@@ -34,6 +34,7 @@ protected:
     touchgfx::TextArea textArea1;
     touchgfx::TextArea textArea2;
     touchgfx::ButtonWithLabel otabutton;
+    touchgfx::TextArea textArea3;
 
 private:
 
