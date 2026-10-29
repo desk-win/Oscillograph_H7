@@ -14,6 +14,7 @@
 /* 当前 CM4 应用栈位于 D2 SRAM 192 KB 内。 */
 #define BOOT_OTA_CM4_STACK_START  0x10000000U
 #define BOOT_OTA_CM4_STACK_END    0x10030000U
+#define BOOT_OTA_BOOT_ATTEMPT_LIMIT 3U
 
 static const char *s_last_error = "none";
 static HAL_StatusTypeDef s_last_status = HAL_OK;
@@ -145,6 +146,59 @@ static BootOTA_Result BootOTA_RejectPackage(OTA_Metadata *metadata)
          : BOOT_OTA_FAILED;
 }
 
+static BootOTA_Result BootOTA_HandleUnconfirmedBoot(OTA_Metadata *metadata)
+{
+    OTA_PackageHeader header;
+    OTA_SlotId active_slot = (OTA_SlotId)metadata->active_slot;
+    OTA_SlotId rollback_slot;
+
+    if ((active_slot != OTA_SLOT_ID_A) && (active_slot != OTA_SLOT_ID_B))
+    {
+        s_last_error = "active-slot";
+        s_last_status = HAL_ERROR;
+        return BOOT_OTA_FAILED;
+    }
+
+    if (metadata->boot_attempts >= BOOT_OTA_BOOT_ATTEMPT_LIMIT)
+    {
+        rollback_slot = (active_slot == OTA_SLOT_ID_A)
+                      ? OTA_SLOT_ID_B : OTA_SLOT_ID_A;
+
+        /* 回滚前先验证旧槽，避免把无效旧包排队安装。 */
+        if (OTA_Package_VerifySlot(rollback_slot, &header) != HAL_OK)
+        {
+            s_last_error = "rollback-package";
+            s_last_status = HAL_ERROR;
+            return BOOT_OTA_FAILED;
+        }
+
+        metadata->pending_slot = (uint8_t)rollback_slot;
+        metadata->pending_state = OTA_SLOT_STATE_VALID;
+        metadata->confirmed = 1U;
+        metadata->boot_attempts = 0U;
+        if (OTA_Metadata_Commit(metadata) != HAL_OK)
+        {
+            s_last_error = "rollback-queue";
+            s_last_status = HAL_ERROR;
+            return BOOT_OTA_FAILED;
+        }
+
+        /* 当前运行中先用复位返回 BootLoader，下一次走正常安装流程。 */
+        s_last_error = "rollback-queued";
+        return BOOT_OTA_ROLLBACK_QUEUED;
+    }
+
+    metadata->boot_attempts++;
+    if (OTA_Metadata_Commit(metadata) != HAL_OK)
+    {
+        s_last_error = "boot-attempt";
+        s_last_status = HAL_ERROR;
+        return BOOT_OTA_FAILED;
+    }
+
+    return BOOT_OTA_NO_UPDATE;
+}
+
 BootOTA_Result BootOTA_Process(void)
 {
     OTA_Metadata metadata;
@@ -169,8 +223,16 @@ BootOTA_Result BootOTA_Process(void)
         s_last_status = HAL_ERROR;
         return BOOT_OTA_NO_UPDATE;
     }
-    if ((found == 0U) ||
-        (metadata.pending_state != OTA_SLOT_STATE_VALID))
+    if (found == 0U)
+    {
+        return BOOT_OTA_NO_UPDATE;
+    }
+    if ((metadata.pending_state == OTA_SLOT_STATE_ACTIVE) &&
+        (metadata.confirmed == 0U))
+    {
+        return BootOTA_HandleUnconfirmedBoot(&metadata);
+    }
+    if (metadata.pending_state != OTA_SLOT_STATE_VALID)
     {
         return BOOT_OTA_NO_UPDATE;
     }
@@ -265,7 +327,6 @@ BootOTA_Result BootOTA_Process(void)
     metadata.active_slot = (uint8_t)slot;
     metadata.pending_slot = (uint8_t)slot;
     metadata.pending_state = OTA_SLOT_STATE_ACTIVE;
-    metadata.confirmed = 0U;
     metadata.boot_attempts = 0U;
 
     if (OTA_Metadata_Commit(&metadata) != HAL_OK)

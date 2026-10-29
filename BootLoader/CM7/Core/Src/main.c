@@ -355,6 +355,12 @@ int main(void)
       HAL_Delay(20U);
       NVIC_SystemReset();
     }
+    else if (ota_result == BOOT_OTA_ROLLBACK_QUEUED)
+    {
+      BootLoader_Printf("[BL] boot attempts reached, rollback queued\r\n");
+      HAL_Delay(20U);
+      NVIC_SystemReset();
+    }
     else if (ota_result == BOOT_OTA_PACKAGE_INVALID)
     {
       BootLoader_Printf("[BL] OTA package invalid (%s, status=%d), boot old application\r\n",

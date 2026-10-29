@@ -451,6 +451,35 @@ static uint8_t OTA_Block0ParserSelfTest(void)
             (file == OTA_FILE_CM4) && (image_size == 1U)) ? 1U : 0U;
 }
 
+/** 应用稳定启动后确认当前 ACTIVE 槽，清除未确认启动计数。 */
+static void OTA_ConfirmBoot(void)
+{
+    OTA_Metadata metadata;
+    uint8_t found = 0U;
+
+    if ((OTA_Metadata_Load(&metadata, &found) != HAL_OK) ||
+        (found == 0U) ||
+        (metadata.pending_state != OTA_SLOT_STATE_ACTIVE) ||
+        (metadata.confirmed != 0U) ||
+        ((metadata.active_slot != OTA_SLOT_ID_A) &&
+         (metadata.active_slot != OTA_SLOT_ID_B)))
+    {
+        return;
+    }
+
+    metadata.confirmed = 1U;
+    metadata.boot_attempts = 0U;
+    if (OTA_Metadata_Commit(&metadata) == HAL_OK)
+    {
+        uart1_printf("[OTA] boot confirmed, slot=%c\r\n",
+                     (metadata.active_slot == OTA_SLOT_ID_A) ? 'A' : 'B');
+    }
+    else
+    {
+        uart1_printf("[OTA] boot confirm FAILED\r\n");
+    }
+}
+
 /**
  * @brief 擦除外部 Flash 中存放新固件的区域。
  * @param address 擦除起始地址。
@@ -1031,6 +1060,10 @@ static void OTA_Task(void *argument)
     TickType_t wait_ticks;
 
     (void)argument;
+
+    /* 调度器启动并稳定运行 1 秒后再确认，启动早期死机不会误提交。 */
+    osDelay(pdMS_TO_TICKS(1000U));
+    OTA_ConfirmBoot();
 
     for (;;)
     {
