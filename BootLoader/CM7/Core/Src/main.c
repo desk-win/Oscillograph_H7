@@ -101,6 +101,7 @@ static void BootLoader_Printf(const char *format, ...)
   }
 }
 
+// 返回值为1的时候表示应用程序入口看起来有效，可以跳转。
 static uint8_t BootLoader_ApplicationValid(void)
 {
   uint32_t app_stack = *(volatile uint32_t *)APP_BASE_ADDRESS;
@@ -114,10 +115,11 @@ static uint8_t BootLoader_ApplicationValid(void)
           ((app_reset & 0x1U) != 0U)) ? 1U : 0U;
 }
 
+// BootLoader跳转到App程序
 static void BootLoader_JumpToApplication(void)
 {
-  uint32_t app_stack = *(volatile uint32_t *)APP_BASE_ADDRESS;
-  uint32_t app_reset = *(volatile uint32_t *)(APP_BASE_ADDRESS + 4U);
+  uint32_t app_stack = *(volatile uint32_t *)APP_BASE_ADDRESS;        // 栈顶地址
+  uint32_t app_reset = *(volatile uint32_t *)(APP_BASE_ADDRESS + 4U); // 复位入口
 
   if (BootLoader_ApplicationValid() == 0U)
   {
@@ -125,7 +127,6 @@ static void BootLoader_JumpToApplication(void)
     {
     }
   }
-
   __disable_irq();
 
   HAL_QSPI_DeInit(&hqspi);
@@ -135,11 +136,11 @@ static void BootLoader_JumpToApplication(void)
   SysTick->CTRL = 0U;
   SysTick->LOAD = 0U;
   SysTick->VAL = 0U;
-
+  //遍历NVIC所有寄存器
   for (uint32_t i = 0U; i < 8U; i++)
   {
-    NVIC->ICER[i] = 0xFFFFFFFFU;
-    NVIC->ICPR[i] = 0xFFFFFFFFU;
+    NVIC->ICER[i] = 0xFFFFFFFFU;          // 关闭所有外部中断
+    NVIC->ICPR[i] = 0xFFFFFFFFU;          // 清除所有挂起中断标志位
   }
 
   SCB->VTOR = APP_BASE_ADDRESS;
@@ -276,6 +277,7 @@ int main(void)
                     (CRC32_SelfTest() == HAL_OK) ? "OK" : "FAILED");
 
   {
+    // 检查外部Flash是否正常
     HAL_StatusTypeDef qspi_status = QSPI_FLASH_Init();
 
     if (qspi_status == HAL_OK)

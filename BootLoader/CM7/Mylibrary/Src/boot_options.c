@@ -4,6 +4,8 @@
 
 static HAL_StatusTypeDef s_last_status = HAL_OK;
 
+
+// bcm4_enabled为0时，BCM4 关闭，CM4 由 CM7 显式启动
 HAL_StatusTypeDef BootOptions_GetCM4Info(BootOptions_CM4Info *info)
 {
     FLASH_OBProgramInitTypeDef options = {0};
